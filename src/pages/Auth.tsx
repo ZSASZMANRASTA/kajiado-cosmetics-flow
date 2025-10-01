@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { ShoppingBag, Loader2 } from 'lucide-react';
 import { z } from 'zod';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -19,6 +20,7 @@ const signupSchema = z.object({
   fullName: z.string().min(2, 'Name must be at least 2 characters'),
   email: z.string().email('Invalid email address'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
+  role: z.enum(['admin', 'cashier'], { errorMap: () => ({ message: 'Please select a role' }) }),
   phone: z.string().optional(),
 });
 
@@ -31,6 +33,7 @@ const Auth = () => {
   const [signupFullName, setSignupFullName] = useState('');
   const [signupEmail, setSignupEmail] = useState('');
   const [signupPassword, setSignupPassword] = useState('');
+  const [signupRole, setSignupRole] = useState<'admin' | 'cashier'>('cashier');
   const [signupPhone, setSignupPhone] = useState('');
 
   if (user) {
@@ -70,6 +73,7 @@ const Auth = () => {
         fullName: signupFullName, 
         email: signupEmail, 
         password: signupPassword,
+        role: signupRole,
         phone: signupPhone 
       });
     } catch (error) {
@@ -80,7 +84,7 @@ const Auth = () => {
     }
 
     setLoading(true);
-    const { error } = await signUp(signupEmail, signupPassword, signupFullName, signupPhone);
+    const { error } = await signUp(signupEmail, signupPassword, signupFullName, signupRole, signupPhone);
     setLoading(false);
 
     if (error) {
@@ -176,6 +180,19 @@ const Auth = () => {
                     value={signupPhone}
                     onChange={(e) => setSignupPhone(e.target.value)}
                   />
+                </div>
+                <div className="space-y-2">
+                  <Label>Select Your Role</Label>
+                  <RadioGroup value={signupRole} onValueChange={(value) => setSignupRole(value as 'admin' | 'cashier')}>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="admin" id="role-admin" />
+                      <Label htmlFor="role-admin" className="font-normal cursor-pointer">Admin - Full access to all features</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="cashier" id="role-cashier" />
+                      <Label htmlFor="role-cashier" className="font-normal cursor-pointer">Cashier - Point of Sale and basic features</Label>
+                    </div>
+                  </RadioGroup>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="signup-password">Password</Label>

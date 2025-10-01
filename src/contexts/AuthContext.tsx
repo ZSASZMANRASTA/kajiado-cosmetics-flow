@@ -8,7 +8,7 @@ interface AuthContextType {
   session: Session | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
-  signUp: (email: string, password: string, fullName: string, phone?: string) => Promise<{ error: any }>;
+  signUp: (email: string, password: string, fullName: string, role: 'admin' | 'cashier', phone?: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
   userRole: 'admin' | 'cashier' | null;
 }
@@ -70,10 +70,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return { error };
   };
 
-  const signUp = async (email: string, password: string, fullName: string, phone?: string) => {
+  const signUp = async (email: string, password: string, fullName: string, role: 'admin' | 'cashier', phone?: string) => {
     const redirectUrl = `${window.location.origin}/dashboard`;
     
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -84,7 +84,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
       }
     });
-    return { error };
+
+    if (error) {
+      return { error };
+    }
+
+    // Assign role to the new user
+    if (data.user) {
+      const { error: roleError } = await supabase
+        .from('user_roles')
+        .insert({ user_id: data.user.id, role });
+
+      if (roleError) {
+        return { error: roleError };
+      }
+    }
+
+    return { error: null };
   };
 
   const signOut = async () => {
