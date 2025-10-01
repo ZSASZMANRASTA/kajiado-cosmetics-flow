@@ -28,11 +28,16 @@ const Index = () => {
         <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-primary text-primary-foreground">
           <ShoppingBag className="h-10 w-10" />
         </div>
-        <h1 className="text-4xl font-bold">Cosmetics POS System</h1>
-        <p className="text-xl text-muted-foreground">Kajiado Shop Management</p>
-        <Button size="lg" onClick={() => navigate('/auth')}>
-          Get Started →
-        </Button>
+         <h1 className="text-4xl font-bold">Cosmetics POS System</h1>
+         <p className="text-xl text-muted-foreground">Kajiado Shop Management</p>
+         <div className="flex items-center justify-center gap-3">
+           <Button size="lg" onClick={() => navigate('/auth')}>
+             Get Started →
+           </Button>
+           <Button variant="outline" size="lg" onClick={() => navigate('/dashboard')}>
+             Go to Dashboard
+           </Button>
+         </div>
       </div>
     </div>
   );

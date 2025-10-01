@@ -52,9 +52,9 @@ const Dashboard = () => {
     },
   ];
 
-  const filteredMenu = menuItems.filter(item => 
-    item.roles.includes(userRole || '')
-  );
+  const filteredMenu = userRole
+    ? menuItems.filter(item => item.roles.includes(userRole))
+    : menuItems.filter(item => ['Point of Sale', 'Inventory'].includes(item.title));
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-secondary/5">
@@ -87,6 +87,14 @@ const Dashboard = () => {
           <h2 className="text-3xl font-bold">Dashboard</h2>
           <p className="text-muted-foreground">Welcome back! Select an option to get started.</p>
         </div>
+
+        {!userRole && (
+          <div className="mb-6 rounded-md border border-accent/50 bg-accent/10 p-4">
+            <p className="text-sm">
+              Your account doesn’t have a role yet. You can access POS and Inventory, but creating sales and admin features require a role. Ask an admin to assign you ‘admin’ or ‘cashier’ in Users or via Supabase.
+            </p>
+          </div>
+        )}
 
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {filteredMenu.map((item) => (
