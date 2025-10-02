@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Search, Plus, Edit, Trash2, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Search, Plus, Edit, Trash2, AlertTriangle, Upload } from 'lucide-react';
+import { CSVImport } from '@/components/inventory/CSVImport';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -24,6 +25,7 @@ const Inventory = () => {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<any>(null);
   const [formData, setFormData] = useState({
     name: '',
@@ -151,13 +153,18 @@ const Inventory = () => {
           </div>
           
           {userRole === 'admin' && (
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-              <DialogTrigger asChild>
-                <Button onClick={resetForm}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Product
-                </Button>
-              </DialogTrigger>
+            <div className="flex gap-2">
+              <Button onClick={() => setIsImportOpen(true)} variant="outline">
+                <Upload className="mr-2 h-4 w-4" />
+                Import CSV
+              </Button>
+              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button onClick={resetForm}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Product
+                  </Button>
+                </DialogTrigger>
               <DialogContent className="max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>
@@ -288,9 +295,16 @@ const Inventory = () => {
                 </form>
               </DialogContent>
             </Dialog>
+            </div>
           )}
         </div>
       </header>
+
+      <CSVImport 
+        open={isImportOpen} 
+        onOpenChange={setIsImportOpen}
+        onImportSuccess={() => queryClient.invalidateQueries({ queryKey: ['products'] })}
+      />
 
       <main className="container mx-auto p-4 space-y-4">
         {lowStockProducts.length > 0 && (
