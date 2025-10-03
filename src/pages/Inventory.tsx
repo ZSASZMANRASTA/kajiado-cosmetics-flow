@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Search, Plus, Edit, Trash2, AlertTriangle, Upload } from 'lucide-react';
+import { ArrowLeft, Search, Plus, CreditCard as Edit, Trash2, TriangleAlert as AlertTriangle, Upload } from 'lucide-react';
 import { CSVImport } from '@/components/inventory/CSVImport';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';

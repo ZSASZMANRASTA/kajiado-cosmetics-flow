@@ -3,18 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useNavigate } from 'react-router-dom';
-import {
-  ShoppingCart,
-  Package,
-  BarChart3,
-  Users,
-  LogOut,
-  ShoppingBag,
-  TrendingUp,
-  AlertTriangle,
-  Download,
-  Upload
-} from 'lucide-react';
+import { ShoppingCart, Package, ChartBar as BarChart3, Users, LogOut, ShoppingBag, TrendingUp, TriangleAlert as AlertTriangle, Download, Upload } from 'lucide-react';
 import { db } from '@/lib/db';
 import { toast } from 'sonner';
 
