@@ -1,21 +1,74 @@
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useNavigate } from 'react-router-dom';
-import { 
-  ShoppingCart, 
-  Package, 
-  BarChart3, 
-  Users, 
+import {
+  ShoppingCart,
+  Package,
+  BarChart3,
+  Users,
   LogOut,
   ShoppingBag,
   TrendingUp,
-  AlertTriangle
+  AlertTriangle,
+  Download,
+  Upload
 } from 'lucide-react';
+import { db } from '@/lib/db';
+import { toast } from 'sonner';
 
 const Dashboard = () => {
   const { user, signOut, userRole } = useAuth();
   const navigate = useNavigate();
+  const [stats, setStats] = useState({
+    todaySales: 0,
+    totalProducts: 0,
+    lowStockCount: 0,
+  });
+
+  useEffect(() => {
+    loadStats();
+  }, []);
+
+  const loadStats = async () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const todaySales = await db.sales.where('createdAt').above(today).toArray();
+    const totalRevenue = todaySales.reduce((sum, sale) => sum + sale.totalAmount, 0);
+
+    const products = await db.products.toArray();
+    const lowStock = products.filter(p => p.stock <= p.reorderLevel);
+
+    setStats({
+      todaySales: totalRevenue,
+      totalProducts: products.length,
+      lowStockCount: lowStock.length,
+    });
+  };
+
+  const handleExportData = async () => {
+    try {
+      await db.exportData();
+      toast.success('Data exported successfully!');
+    } catch (error) {
+      toast.error('Failed to export data');
+    }
+  };
+
+  const handleImportData = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      await db.importData(file);
+      toast.success('Data imported successfully!');
+      loadStats();
+    } catch (error) {
+      toast.error('Failed to import data');
+    }
+  };
 
   const menuItems = [
     {
@@ -54,7 +107,7 @@ const Dashboard = () => {
 
   const filteredMenu = userRole
     ? menuItems.filter(item => item.roles.includes(userRole))
-    : menuItems.filter(item => ['Point of Sale', 'Inventory'].includes(item.title));
+    : menuItems;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-secondary/5">
@@ -66,12 +119,12 @@ const Dashboard = () => {
             </div>
             <div>
               <h1 className="text-xl font-bold">Cosmetics POS</h1>
-              <p className="text-xs text-muted-foreground">Kajiado Shop</p>
+              <p className="text-xs text-muted-foreground">Kajiado Shop - Offline Mode</p>
             </div>
           </div>
           <div className="flex items-center gap-4">
             <div className="text-right">
-              <p className="text-sm font-medium">{user?.email}</p>
+              <p className="text-sm font-medium">{user?.fullName || user?.email}</p>
               <p className="text-xs text-muted-foreground capitalize">{userRole}</p>
             </div>
             <Button variant="outline" size="sm" onClick={() => signOut()}>
@@ -83,22 +136,38 @@ const Dashboard = () => {
       </header>
 
       <main className="container mx-auto p-6">
-        <div className="mb-6">
-          <h2 className="text-3xl font-bold">Dashboard</h2>
-          <p className="text-muted-foreground">Welcome back! Select an option to get started.</p>
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h2 className="text-3xl font-bold">Dashboard</h2>
+            <p className="text-muted-foreground">Welcome back! Select an option to get started.</p>
+          </div>
+          {userRole === 'admin' && (
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={handleExportData}>
+                <Download className="mr-2 h-4 w-4" />
+                Export Backup
+              </Button>
+              <label>
+                <Button variant="outline" asChild>
+                  <span>
+                    <Upload className="mr-2 h-4 w-4" />
+                    Import Backup
+                  </span>
+                </Button>
+                <input
+                  type="file"
+                  accept=".json"
+                  onChange={handleImportData}
+                  className="hidden"
+                />
+              </label>
+            </div>
+          )}
         </div>
 
-        {!userRole && (
-          <div className="mb-6 rounded-md border border-accent/50 bg-accent/10 p-4">
-            <p className="text-sm">
-              Your account doesn’t have a role yet. You can access POS and Inventory, but creating sales and admin features require a role. Ask an admin to assign you ‘admin’ or ‘cashier’ in Users or via Supabase.
-            </p>
-          </div>
-        )}
-
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
           {filteredMenu.map((item) => (
-            <Card 
+            <Card
               key={item.path}
               className="cursor-pointer transition-all hover:shadow-lg hover:-translate-y-1"
               onClick={() => navigate(item.path)}
@@ -127,33 +196,73 @@ const Dashboard = () => {
                 <TrendingUp className="h-4 w-4 text-success" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">KES 0</div>
-                <p className="text-xs text-muted-foreground">No sales recorded today</p>
+                <div className="text-2xl font-bold">KES {stats.todaySales.toFixed(2)}</div>
+                <p className="text-xs text-muted-foreground">
+                  {stats.todaySales > 0 ? 'Sales recorded today' : 'No sales recorded today'}
+                </p>
               </CardContent>
             </Card>
-            
+
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Total Products</CardTitle>
                 <Package className="h-4 w-4 text-primary" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">0</div>
+                <div className="text-2xl font-bold">{stats.totalProducts}</div>
                 <p className="text-xs text-muted-foreground">Items in inventory</p>
               </CardContent>
             </Card>
-            
+
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Low Stock Alerts</CardTitle>
                 <AlertTriangle className="h-4 w-4 text-destructive" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">0</div>
-                <p className="text-xs text-muted-foreground">Items need restocking</p>
+                <div className="text-2xl font-bold">{stats.lowStockCount}</div>
+                <p className="text-xs text-muted-foreground">
+                  {stats.lowStockCount > 0 ? 'Items need restocking' : 'All items well stocked'}
+                </p>
               </CardContent>
             </Card>
           </div>
+        )}
+
+        {userRole === 'admin' && (
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle>Data Management</CardTitle>
+              <CardDescription>
+                Backup and restore your offline data. Export creates a JSON file with all your data.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <p className="text-sm text-muted-foreground">
+                Regular backups are recommended to prevent data loss. Store backup files in a safe location.
+              </p>
+              <div className="flex gap-2">
+                <Button onClick={handleExportData} variant="outline">
+                  <Download className="mr-2 h-4 w-4" />
+                  Create Backup
+                </Button>
+                <label>
+                  <Button variant="outline" asChild>
+                    <span>
+                      <Upload className="mr-2 h-4 w-4" />
+                      Restore from Backup
+                    </span>
+                  </Button>
+                  <input
+                    type="file"
+                    accept=".json"
+                    onChange={handleImportData}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            </CardContent>
+          </Card>
         )}
       </main>
     </div>

@@ -1,18 +1,17 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { ArrowLeft, Search, Plus, Edit, Trash2, AlertTriangle, Upload } from 'lucide-react';
 import { CSVImport } from '@/components/inventory/CSVImport';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/contexts/AuthContext';
 import { Badge } from '@/components/ui/badge';
+import { db, Product } from '@/lib/db';
 
 const categories = [
   'soaps', 'lotions', 'oils', 'deodorants', 'hair_products',
@@ -22,123 +21,123 @@ const categories = [
 const Inventory = () => {
   const navigate = useNavigate();
   const { userRole } = useAuth();
-  const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
-  const [editingProduct, setEditingProduct] = useState<any>(null);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [products, setProducts] = useState<Product[]>([]);
   const [formData, setFormData] = useState({
     name: '',
     brand: '',
     category: 'soaps',
-    unit_size: '',
     barcode: '',
-    cost_price: '',
-    selling_price: '',
-    quantity_in_stock: '',
-    low_stock_threshold: '10',
-    supplier: '',
+    buyingPrice: '',
+    sellingPrice: '',
+    stock: '',
+    reorderLevel: '10',
   });
 
-  const { data: products = [] } = useQuery({
-    queryKey: ['products', searchTerm],
-    queryFn: async () => {
-      let query = supabase.from('products').select('*').order('name');
-      
+  useEffect(() => {
+    loadProducts();
+  }, [searchTerm]);
+
+  const loadProducts = async () => {
+    try {
+      let query = db.products.orderBy('name');
+
       if (searchTerm) {
-        query = query.or(`name.ilike.%${searchTerm}%,brand.ilike.%${searchTerm}%,barcode.ilike.%${searchTerm}%`);
-      }
-      
-      const { data, error } = await query;
-      if (error) throw error;
-      return data || [];
-    },
-  });
-
-  const saveMutation = useMutation({
-    mutationFn: async (data: any) => {
-      if (editingProduct) {
-        const { error } = await supabase
-          .from('products')
-          .update(data)
-          .eq('id', editingProduct.id);
-        if (error) throw error;
+        const results = await db.products
+          .filter(p =>
+            p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            p.brand.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (p.barcode && p.barcode.toLowerCase().includes(searchTerm.toLowerCase()))
+          )
+          .toArray();
+        setProducts(results);
       } else {
-        const { error } = await supabase.from('products').insert(data);
-        if (error) throw error;
+        const results = await query.toArray();
+        setProducts(results);
       }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['products'] });
-      toast.success(editingProduct ? 'Product updated!' : 'Product added!');
-      setIsDialogOpen(false);
-      resetForm();
-    },
-    onError: (error: any) => {
-      toast.error(error.message || 'Failed to save product');
-    },
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from('products').delete().eq('id', id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['products'] });
-      toast.success('Product deleted!');
-    },
-    onError: (error: any) => {
-      toast.error(error.message || 'Failed to delete product');
-    },
-  });
+    } catch (error) {
+      toast.error('Failed to load products');
+    }
+  };
 
   const resetForm = () => {
     setFormData({
       name: '',
       brand: '',
       category: 'soaps',
-      unit_size: '',
       barcode: '',
-      cost_price: '',
-      selling_price: '',
-      quantity_in_stock: '',
-      low_stock_threshold: '10',
-      supplier: '',
+      buyingPrice: '',
+      sellingPrice: '',
+      stock: '',
+      reorderLevel: '10',
     });
     setEditingProduct(null);
   };
 
-  const handleEdit = (product: any) => {
+  const handleEdit = (product: Product) => {
     setEditingProduct(product);
     setFormData({
       name: product.name,
-      brand: product.brand || '',
+      brand: product.brand,
       category: product.category,
-      unit_size: product.unit_size,
       barcode: product.barcode || '',
-      cost_price: product.cost_price.toString(),
-      selling_price: product.selling_price.toString(),
-      quantity_in_stock: product.quantity_in_stock.toString(),
-      low_stock_threshold: product.low_stock_threshold.toString(),
-      supplier: product.supplier || '',
+      buyingPrice: product.buyingPrice.toString(),
+      sellingPrice: product.sellingPrice.toString(),
+      stock: product.stock.toString(),
+      reorderLevel: product.reorderLevel.toString(),
     });
     setIsDialogOpen(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    saveMutation.mutate({
-      ...formData,
-      cost_price: parseFloat(formData.cost_price),
-      selling_price: parseFloat(formData.selling_price),
-      quantity_in_stock: parseInt(formData.quantity_in_stock),
-      low_stock_threshold: parseInt(formData.low_stock_threshold),
-    });
+    try {
+      const productData = {
+        name: formData.name,
+        brand: formData.brand,
+        category: formData.category,
+        barcode: formData.barcode,
+        buyingPrice: parseFloat(formData.buyingPrice),
+        sellingPrice: parseFloat(formData.sellingPrice),
+        stock: parseInt(formData.stock),
+        reorderLevel: parseInt(formData.reorderLevel),
+        updatedAt: new Date(),
+      };
+
+      if (editingProduct) {
+        await db.products.update(editingProduct.id!, productData);
+        toast.success('Product updated!');
+      } else {
+        await db.products.add({
+          ...productData,
+          createdAt: new Date(),
+        });
+        toast.success('Product added!');
+      }
+
+      setIsDialogOpen(false);
+      resetForm();
+      loadProducts();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to save product');
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    try {
+      await db.products.delete(id);
+      toast.success('Product deleted!');
+      loadProducts();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to delete product');
+    }
   };
 
   const lowStockProducts = products.filter(
-    p => p.quantity_in_stock <= p.low_stock_threshold
+    p => p.stock <= p.reorderLevel
   );
 
   return (
@@ -151,7 +150,7 @@ const Inventory = () => {
             </Button>
             <h1 className="text-2xl font-bold">Inventory Management</h1>
           </div>
-          
+
           {userRole === 'admin' && (
             <div className="flex gap-2">
               <Button onClick={() => setIsImportOpen(true)} variant="outline">
@@ -186,11 +185,12 @@ const Inventory = () => {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="brand">Brand</Label>
+                      <Label htmlFor="brand">Brand *</Label>
                       <Input
                         id="brand"
                         value={formData.brand}
                         onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
+                        required
                       />
                     </div>
                     <div className="space-y-2">
@@ -209,16 +209,6 @@ const Inventory = () => {
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="unit_size">Unit Size *</Label>
-                      <Input
-                        id="unit_size"
-                        placeholder="e.g., 100ml, bar, tube"
-                        value={formData.unit_size}
-                        onChange={(e) => setFormData({ ...formData, unit_size: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
                       <Label htmlFor="barcode">Barcode</Label>
                       <Input
                         id="barcode"
@@ -227,52 +217,44 @@ const Inventory = () => {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="supplier">Supplier</Label>
+                      <Label htmlFor="buyingPrice">Buying Price (KES) *</Label>
                       <Input
-                        id="supplier"
-                        value={formData.supplier}
-                        onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="cost_price">Cost Price (KES) *</Label>
-                      <Input
-                        id="cost_price"
+                        id="buyingPrice"
                         type="number"
                         step="0.01"
-                        value={formData.cost_price}
-                        onChange={(e) => setFormData({ ...formData, cost_price: e.target.value })}
+                        value={formData.buyingPrice}
+                        onChange={(e) => setFormData({ ...formData, buyingPrice: e.target.value })}
                         required
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="selling_price">Selling Price (KES) *</Label>
+                      <Label htmlFor="sellingPrice">Selling Price (KES) *</Label>
                       <Input
-                        id="selling_price"
+                        id="sellingPrice"
                         type="number"
                         step="0.01"
-                        value={formData.selling_price}
-                        onChange={(e) => setFormData({ ...formData, selling_price: e.target.value })}
+                        value={formData.sellingPrice}
+                        onChange={(e) => setFormData({ ...formData, sellingPrice: e.target.value })}
                         required
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="quantity_in_stock">Quantity *</Label>
+                      <Label htmlFor="stock">Quantity in Stock *</Label>
                       <Input
-                        id="quantity_in_stock"
+                        id="stock"
                         type="number"
-                        value={formData.quantity_in_stock}
-                        onChange={(e) => setFormData({ ...formData, quantity_in_stock: e.target.value })}
+                        value={formData.stock}
+                        onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
                         required
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="low_stock_threshold">Low Stock Alert *</Label>
+                      <Label htmlFor="reorderLevel">Low Stock Alert *</Label>
                       <Input
-                        id="low_stock_threshold"
+                        id="reorderLevel"
                         type="number"
-                        value={formData.low_stock_threshold}
-                        onChange={(e) => setFormData({ ...formData, low_stock_threshold: e.target.value })}
+                        value={formData.reorderLevel}
+                        onChange={(e) => setFormData({ ...formData, reorderLevel: e.target.value })}
                         required
                       />
                     </div>
@@ -300,10 +282,10 @@ const Inventory = () => {
         </div>
       </header>
 
-      <CSVImport 
-        open={isImportOpen} 
+      <CSVImport
+        open={isImportOpen}
         onOpenChange={setIsImportOpen}
-        onImportSuccess={() => queryClient.invalidateQueries({ queryKey: ['products'] })}
+        onImportSuccess={loadProducts}
       />
 
       <main className="container mx-auto p-4 space-y-4">
@@ -322,7 +304,7 @@ const Inventory = () => {
                     <div>
                       <p className="font-medium">{product.name}</p>
                       <p className="text-sm text-muted-foreground">
-                        Stock: {product.quantity_in_stock} (Alert at {product.low_stock_threshold})
+                        Stock: {product.stock} (Alert at {product.reorderLevel})
                       </p>
                     </div>
                     {userRole === 'admin' && (
@@ -371,7 +353,7 @@ const Inventory = () => {
                         <div>
                           <p className="font-medium">{product.name}</p>
                           <p className="text-sm text-muted-foreground">
-                            {product.brand} - {product.unit_size}
+                            {product.brand}
                           </p>
                         </div>
                       </td>
@@ -379,15 +361,15 @@ const Inventory = () => {
                         <Badge variant="outline">{product.category.replace('_', ' ')}</Badge>
                       </td>
                       <td className="p-2">
-                        <span className={product.quantity_in_stock <= product.low_stock_threshold ? 'text-destructive font-bold' : ''}>
-                          {product.quantity_in_stock}
+                        <span className={product.stock <= product.reorderLevel ? 'text-destructive font-bold' : ''}>
+                          {product.stock}
                         </span>
                       </td>
                       <td className="p-2 text-right">
-                        KES {Number(product.cost_price).toFixed(2)}
+                        KES {product.buyingPrice.toFixed(2)}
                       </td>
                       <td className="p-2 text-right font-bold text-primary">
-                        KES {Number(product.selling_price).toFixed(2)}
+                        KES {product.sellingPrice.toFixed(2)}
                       </td>
                       {userRole === 'admin' && (
                         <td className="p-2">
@@ -404,7 +386,7 @@ const Inventory = () => {
                               variant="ghost"
                               onClick={() => {
                                 if (confirm('Delete this product?')) {
-                                  deleteMutation.mutate(product.id);
+                                  handleDelete(product.id!);
                                 }
                               }}
                             >

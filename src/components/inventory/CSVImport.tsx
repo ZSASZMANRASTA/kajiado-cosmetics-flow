@@ -6,8 +6,8 @@ import { Upload, Download, AlertCircle, CheckCircle2, X } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import Papa from "papaparse";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { db } from "@/lib/db";
 
 const PRODUCT_CATEGORIES = [
   'soaps', 'lotions', 'oils', 'deodorants', 'hair_products',
@@ -20,26 +20,22 @@ interface CSVRow {
   name: string;
   brand?: string;
   category: string;
-  unit_size: string;
   barcode?: string;
-  cost_price: string;
+  buying_price: string;
   selling_price: string;
-  quantity_in_stock: string;
-  low_stock_threshold?: string;
-  supplier?: string;
+  stock: string;
+  reorder_level?: string;
 }
 
 interface ParsedProduct {
   name: string;
-  brand?: string;
+  brand: string;
   category: ProductCategory;
-  unit_size: string;
   barcode?: string;
-  cost_price: number;
-  selling_price: number;
-  quantity_in_stock: number;
-  low_stock_threshold: number;
-  supplier?: string;
+  buyingPrice: number;
+  sellingPrice: number;
+  stock: number;
+  reorderLevel: number;
 }
 
 interface ValidationError {
@@ -75,13 +71,9 @@ export function CSVImport({ open, onOpenChange, onImportSuccess }: CSVImportProp
       rowErrors.push({ row: rowIndex, field: "category", message: `Invalid category. Must be one of: ${PRODUCT_CATEGORIES.join(", ")}` });
     }
 
-    if (!row.unit_size?.trim()) {
-      rowErrors.push({ row: rowIndex, field: "unit_size", message: "Unit size is required" });
-    }
-
-    const costPrice = parseFloat(row.cost_price);
-    if (isNaN(costPrice) || costPrice < 0) {
-      rowErrors.push({ row: rowIndex, field: "cost_price", message: "Cost price must be a positive number" });
+    const buyingPrice = parseFloat(row.buying_price);
+    if (isNaN(buyingPrice) || buyingPrice < 0) {
+      rowErrors.push({ row: rowIndex, field: "buying_price", message: "Buying price must be a positive number" });
     }
 
     const sellingPrice = parseFloat(row.selling_price);
@@ -89,14 +81,14 @@ export function CSVImport({ open, onOpenChange, onImportSuccess }: CSVImportProp
       rowErrors.push({ row: rowIndex, field: "selling_price", message: "Selling price must be a positive number" });
     }
 
-    const quantity = parseInt(row.quantity_in_stock);
+    const quantity = parseInt(row.stock);
     if (isNaN(quantity) || quantity < 0) {
-      rowErrors.push({ row: rowIndex, field: "quantity_in_stock", message: "Quantity must be a non-negative number" });
+      rowErrors.push({ row: rowIndex, field: "stock", message: "Quantity must be a non-negative number" });
     }
 
-    const threshold = row.low_stock_threshold ? parseInt(row.low_stock_threshold) : 10;
+    const threshold = row.reorder_level ? parseInt(row.reorder_level) : 10;
     if (isNaN(threshold) || threshold < 0) {
-      rowErrors.push({ row: rowIndex, field: "low_stock_threshold", message: "Low stock threshold must be a non-negative number" });
+      rowErrors.push({ row: rowIndex, field: "reorder_level", message: "Reorder level must be a non-negative number" });
     }
 
     if (rowErrors.length > 0) {
@@ -107,15 +99,13 @@ export function CSVImport({ open, onOpenChange, onImportSuccess }: CSVImportProp
       valid: true,
       product: {
         name: row.name.trim(),
-        brand: row.brand?.trim(),
+        brand: row.brand?.trim() || '',
         category: row.category.toLowerCase() as ProductCategory,
-        unit_size: row.unit_size.trim(),
         barcode: row.barcode?.trim(),
-        cost_price: costPrice,
-        selling_price: sellingPrice,
-        quantity_in_stock: quantity,
-        low_stock_threshold: threshold,
-        supplier: row.supplier?.trim(),
+        buyingPrice: buyingPrice,
+        sellingPrice: sellingPrice,
+        stock: quantity,
+        reorderLevel: threshold,
       },
       errors: []
     };
@@ -133,7 +123,7 @@ export function CSVImport({ open, onOpenChange, onImportSuccess }: CSVImportProp
         const allErrors: ValidationError[] = [];
 
         results.data.forEach((row, index) => {
-          const validation = validateRow(row, index + 2); // +2 because row 1 is header
+          const validation = validateRow(row, index + 2);
           if (validation.valid && validation.product) {
             validProducts.push(validation.product);
           } else {
@@ -169,33 +159,25 @@ export function CSVImport({ open, onOpenChange, onImportSuccess }: CSVImportProp
     setProgress(0);
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
-
-      const batchSize = 50;
       let successCount = 0;
       let failedCount = 0;
 
-      for (let i = 0; i < csvData.length; i += batchSize) {
-        const batch = csvData.slice(i, i + batchSize);
-        
-        const productsWithCreatedBy = batch.map(product => ({
-          ...product,
-          created_by: user.id
-        }));
+      for (let i = 0; i < csvData.length; i++) {
+        const product = csvData[i];
 
-        const { error } = await supabase
-          .from('products')
-          .insert(productsWithCreatedBy);
-
-        if (error) {
-          failedCount += batch.length;
-          console.error('Batch import error:', error);
-        } else {
-          successCount += batch.length;
+        try {
+          await db.products.add({
+            ...product,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          });
+          successCount++;
+        } catch (error) {
+          failedCount++;
+          console.error('Product import error:', error);
         }
 
-        setProgress(Math.round(((i + batch.length) / csvData.length) * 100));
+        setProgress(Math.round(((i + 1) / csvData.length) * 100));
       }
 
       setImportResult({ success: successCount, failed: failedCount });
@@ -221,9 +203,9 @@ export function CSVImport({ open, onOpenChange, onImportSuccess }: CSVImportProp
 
   const downloadTemplate = () => {
     const template = [
-      ["name", "brand", "category", "unit_size", "barcode", "cost_price", "selling_price", "quantity_in_stock", "low_stock_threshold", "supplier"],
-      ["Dove Soap Bar", "Dove", "soaps", "100g", "123456789", "45.00", "65.00", "50", "10", "Supplier ABC"],
-      ["Nivea Lotion", "Nivea", "lotions", "200ml", "987654321", "120.00", "180.00", "25", "5", "Supplier XYZ"],
+      ["name", "brand", "category", "barcode", "buying_price", "selling_price", "stock", "reorder_level"],
+      ["Dove Soap Bar", "Dove", "soaps", "123456789", "45.00", "65.00", "50", "10"],
+      ["Nivea Lotion", "Nivea", "lotions", "987654321", "120.00", "180.00", "25", "5"],
     ];
 
     const csv = Papa.unparse(template);
@@ -309,7 +291,6 @@ export function CSVImport({ open, onOpenChange, onImportSuccess }: CSVImportProp
                       <TableHead>Name</TableHead>
                       <TableHead>Brand</TableHead>
                       <TableHead>Category</TableHead>
-                      <TableHead>Unit Size</TableHead>
                       <TableHead>Cost</TableHead>
                       <TableHead>Price</TableHead>
                       <TableHead>Stock</TableHead>
@@ -321,10 +302,9 @@ export function CSVImport({ open, onOpenChange, onImportSuccess }: CSVImportProp
                         <TableCell>{product.name}</TableCell>
                         <TableCell>{product.brand || '-'}</TableCell>
                         <TableCell>{product.category}</TableCell>
-                        <TableCell>{product.unit_size}</TableCell>
-                        <TableCell>KSh {product.cost_price.toFixed(2)}</TableCell>
-                        <TableCell>KSh {product.selling_price.toFixed(2)}</TableCell>
-                        <TableCell>{product.quantity_in_stock}</TableCell>
+                        <TableCell>KSh {product.buyingPrice.toFixed(2)}</TableCell>
+                        <TableCell>KSh {product.sellingPrice.toFixed(2)}</TableCell>
+                        <TableCell>{product.stock}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -360,8 +340,8 @@ export function CSVImport({ open, onOpenChange, onImportSuccess }: CSVImportProp
                   <X className="mr-2 h-4 w-4" />
                   Cancel
                 </Button>
-                <Button 
-                  onClick={handleImport} 
+                <Button
+                  onClick={handleImport}
                   disabled={importing || csvData.length === 0 || errors.length > 0}
                 >
                   <Upload className="mr-2 h-4 w-4" />

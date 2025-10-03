@@ -1,17 +1,16 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { ArrowLeft, Search, ShoppingCart, Trash2 } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/contexts/AuthContext';
+import { db, Product } from '@/lib/db';
 
 interface CartItem {
-  productId: string;
+  productId: number;
   name: string;
   price: number;
   quantity: number;
@@ -24,24 +23,36 @@ const POS = () => {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'mpesa' | 'card'>('cash');
   const [processing, setProcessing] = useState(false);
+  const [products, setProducts] = useState<Product[]>([]);
 
-  const { data: products = [], refetch } = useQuery({
-    queryKey: ['products', searchTerm],
-    queryFn: async () => {
-      let query = supabase.from('products').select('*');
-      
+  useEffect(() => {
+    loadProducts();
+  }, [searchTerm]);
+
+  const loadProducts = async () => {
+    try {
+      let query = db.products.orderBy('name');
+
       if (searchTerm) {
-        query = query.or(`name.ilike.%${searchTerm}%,barcode.ilike.%${searchTerm}%`);
+        const results = await db.products
+          .filter(p =>
+            p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (p.barcode && p.barcode.toLowerCase().includes(searchTerm.toLowerCase()))
+          )
+          .limit(20)
+          .toArray();
+        setProducts(results);
+      } else {
+        const results = await query.limit(20).toArray();
+        setProducts(results);
       }
-      
-      const { data, error } = await query.limit(20);
-      if (error) throw error;
-      return data || [];
-    },
-  });
+    } catch (error) {
+      toast.error('Failed to load products');
+    }
+  };
 
-  const addToCart = (product: any) => {
-    if (product.quantity_in_stock <= 0) {
+  const addToCart = (product: Product) => {
+    if (product.stock <= 0) {
       toast.error('Product out of stock!');
       return;
     }
@@ -49,7 +60,7 @@ const POS = () => {
     setCart(prev => {
       const existing = prev.find(item => item.productId === product.id);
       if (existing) {
-        if (existing.quantity >= product.quantity_in_stock) {
+        if (existing.quantity >= product.stock) {
           toast.error('Not enough stock!');
           return prev;
         }
@@ -60,19 +71,19 @@ const POS = () => {
         );
       }
       return [...prev, {
-        productId: product.id,
+        productId: product.id!,
         name: product.name,
-        price: Number(product.selling_price),
+        price: product.sellingPrice,
         quantity: 1,
       }];
     });
   };
 
-  const removeFromCart = (productId: string) => {
+  const removeFromCart = (productId: number) => {
     setCart(prev => prev.filter(item => item.productId !== productId));
   };
 
-  const updateQuantity = (productId: string, newQuantity: number) => {
+  const updateQuantity = (productId: number, newQuantity: number) => {
     if (newQuantity < 1) {
       removeFromCart(productId);
       return;
@@ -92,55 +103,48 @@ const POS = () => {
       return;
     }
 
+    if (!user?.id) {
+      toast.error('User not authenticated');
+      return;
+    }
+
     setProcessing(true);
     try {
-      const saleData = {
-        total_amount: total,
-        tax_amount: 0,
-        discount_amount: 0,
-        payment_method: paymentMethod,
-        cashier_id: user?.id,
-        receipt_number: `RCP-${Date.now()}`,
-      };
+      const receiptNumber = `RCP-${Date.now()}`;
 
-      const { data: sale, error: saleError } = await supabase
-        .from('sales')
-        .insert(saleData)
-        .select()
-        .single();
-
-      if (saleError) throw saleError;
-
-      const saleItems = cart.map(item => ({
-        sale_id: sale.id,
-        product_id: item.productId,
-        product_name: item.name,
-        quantity: item.quantity,
-        unit_price: item.price,
-        subtotal: item.price * item.quantity,
-      }));
-
-      const { error: itemsError } = await supabase
-        .from('sale_items')
-        .insert(saleItems);
-
-      if (itemsError) throw itemsError;
+      const saleId = await db.sales.add({
+        receiptNumber,
+        totalAmount: total,
+        amountPaid: total,
+        change: 0,
+        paymentMethod,
+        cashierId: user.id,
+        cashierName: user.fullName,
+        createdAt: new Date(),
+      });
 
       for (const item of cart) {
-        const product = products.find(p => p.id === item.productId);
+        await db.saleItems.add({
+          saleId,
+          productId: item.productId,
+          productName: item.name,
+          quantity: item.quantity,
+          price: item.price,
+          subtotal: item.price * item.quantity,
+        });
+
+        const product = await db.products.get(item.productId);
         if (product) {
-          const { error: updateError } = await supabase
-            .from('products')
-            .update({ quantity_in_stock: product.quantity_in_stock - item.quantity })
-            .eq('id', item.productId);
-          
-          if (updateError) throw updateError;
+          await db.products.update(item.productId, {
+            stock: product.stock - item.quantity,
+            updatedAt: new Date(),
+          });
         }
       }
 
-      toast.success('Sale completed successfully!');
+      toast.success(`Sale completed! Receipt: ${receiptNumber}`);
       setCart([]);
-      refetch();
+      loadProducts();
     } catch (error: any) {
       toast.error(error.message || 'Failed to process sale');
     } finally {
@@ -175,7 +179,7 @@ const POS = () => {
                   className="pl-9"
                 />
               </div>
-              
+
               <div className="max-h-[600px] space-y-2 overflow-auto">
                 {products.map((product) => (
                   <Card
@@ -187,15 +191,15 @@ const POS = () => {
                       <div className="flex-1">
                         <p className="font-medium">{product.name}</p>
                         <p className="text-sm text-muted-foreground">
-                          {product.brand} - {product.unit_size}
+                          {product.brand} - {product.category}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          Stock: {product.quantity_in_stock}
+                          Stock: {product.stock}
                         </p>
                       </div>
                       <div className="text-right">
                         <p className="font-bold text-primary">
-                          KES {Number(product.selling_price).toFixed(2)}
+                          KES {product.sellingPrice.toFixed(2)}
                         </p>
                       </div>
                     </CardContent>

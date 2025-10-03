@@ -1,11 +1,9 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { User, Session } from '@supabase/supabase-js';
-import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
+import { db, User } from '@/lib/db';
 
 interface AuthContextType {
   user: User | null;
-  session: Session | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
@@ -14,71 +12,63 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const SESSION_KEY = 'kajiadoCosmetics_session';
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState<'admin' | 'cashier' | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        (async () => {
-          setSession(session);
-          setUser(session?.user ?? null);
-
-          if (session?.user) {
-            await fetchUserRole(session.user.id);
-          } else {
-            setUserRole(null);
-          }
-        })();
-      }
-    );
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchUserRole(session.user.id);
-      }
-      setLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
+    const sessionData = localStorage.getItem(SESSION_KEY);
+    if (sessionData) {
+      const userData = JSON.parse(sessionData);
+      setUser(userData);
+      setUserRole(userData.role);
+    }
+    setLoading(false);
   }, []);
 
-  const fetchUserRole = async (userId: string) => {
-    const { data, error } = await supabase
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', userId)
-      .maybeSingle();
+  const signIn = async (email: string, password: string) => {
+    try {
+      const user = await db.users
+        .where('email')
+        .equals(email.toLowerCase())
+        .first();
 
-    if (!error && data) {
-      setUserRole(data.role as 'admin' | 'cashier');
-    } else {
-      setUserRole(null);
+      if (!user) {
+        return { error: { message: 'Invalid email or password' } };
+      }
+
+      const isValid = await db.verifyPassword(password, user.password);
+
+      if (!isValid) {
+        return { error: { message: 'Invalid email or password' } };
+      }
+
+      const sessionUser = { ...user };
+      delete sessionUser.password;
+
+      localStorage.setItem(SESSION_KEY, JSON.stringify(sessionUser));
+      setUser(sessionUser);
+      setUserRole(user.role);
+
+      return { error: null };
+    } catch (error) {
+      return { error: { message: 'An error occurred during sign in' } };
     }
   };
 
-  const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    return { error };
-  };
-
   const signOut = async () => {
-    await supabase.auth.signOut();
+    localStorage.removeItem(SESSION_KEY);
+    setUser(null);
     setUserRole(null);
     navigate('/auth');
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, signIn, signOut, userRole }}>
+    <AuthContext.Provider value={{ user, loading, signIn, signOut, userRole }}>
       {children}
     </AuthContext.Provider>
   );
