@@ -11,12 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/contexts/AuthContext';
 import { Badge } from '@/components/ui/badge';
-import { db, Product } from '@/lib/db';
-
-const categories = [
-  'soaps', 'lotions', 'oils', 'deodorants', 'hair_products',
-  'petroleum_jelly', 'toothpaste', 'detergents', 'household_hygiene', 'other'
-];
+import { db, Product, Category } from '@/lib/db';
 
 const Inventory = () => {
   const navigate = useNavigate();
@@ -26,10 +21,11 @@ const Inventory = () => {
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [formData, setFormData] = useState({
     name: '',
     brand: '',
-    category: 'soaps',
+    category: '',
     barcode: '',
     buyingPrice: '',
     sellingPrice: '',
@@ -39,7 +35,20 @@ const Inventory = () => {
 
   useEffect(() => {
     loadProducts();
+    loadCategories();
   }, [searchTerm]);
+
+  const loadCategories = async () => {
+    try {
+      const cats = await db.categories.orderBy('name').toArray();
+      setCategories(cats);
+      if (cats.length > 0 && !formData.category) {
+        setFormData(prev => ({ ...prev, category: cats[0].name }));
+      }
+    } catch (error) {
+      toast.error('Failed to load categories');
+    }
+  };
 
   const loadProducts = async () => {
     try {
@@ -67,7 +76,7 @@ const Inventory = () => {
     setFormData({
       name: '',
       brand: '',
-      category: 'soaps',
+      category: categories.length > 0 ? categories[0].name : '',
       barcode: '',
       buyingPrice: '',
       sellingPrice: '',
@@ -201,8 +210,8 @@ const Inventory = () => {
                         </SelectTrigger>
                         <SelectContent>
                           {categories.map((cat) => (
-                            <SelectItem key={cat} value={cat}>
-                              {cat.replace('_', ' ')}
+                            <SelectItem key={cat.id} value={cat.name}>
+                              {cat.name}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -358,7 +367,7 @@ const Inventory = () => {
                         </div>
                       </td>
                       <td className="p-2">
-                        <Badge variant="outline">{product.category.replace('_', ' ')}</Badge>
+                        <Badge variant="outline">{product.category}</Badge>
                       </td>
                       <td className="p-2">
                         <span className={product.stock <= product.reorderLevel ? 'text-destructive font-bold' : ''}>

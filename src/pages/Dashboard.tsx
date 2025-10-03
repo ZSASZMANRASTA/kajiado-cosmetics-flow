@@ -107,8 +107,8 @@ const Dashboard = () => {
               <ShoppingBag className="h-5 w-5" />
             </div>
             <div>
-              <h1 className="text-xl font-bold">Cosmetics POS</h1>
-              <p className="text-xs text-muted-foreground">Kajiado Shop - Offline Mode</p>
+              <h1 className="text-xl font-bold">Kajiado POS</h1>
+              <p className="text-xs text-muted-foreground">Offline Mode</p>
             </div>
           </div>
           <div className="flex items-center gap-4">

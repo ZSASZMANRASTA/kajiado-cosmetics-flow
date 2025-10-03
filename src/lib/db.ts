@@ -9,6 +9,12 @@ export interface User {
   createdAt: Date;
 }
 
+export interface Category {
+  id?: number;
+  name: string;
+  createdAt: Date;
+}
+
 export interface Product {
   id?: number;
   name: string;
@@ -50,15 +56,17 @@ export class LocalDatabase extends Dexie {
   products!: Table<Product>;
   sales!: Table<Sale>;
   saleItems!: Table<SaleItem>;
+  categories!: Table<Category>;
 
   constructor() {
-    super('KajiadoCosmetics');
+    super('KajiadoPOS');
 
-    this.version(1).stores({
+    this.version(2).stores({
       users: '++id, email, role',
       products: '++id, name, brand, category, barcode, stock',
       sales: '++id, receiptNumber, cashierId, createdAt',
-      saleItems: '++id, saleId, productId'
+      saleItems: '++id, saleId, productId',
+      categories: '++id, name'
     });
   }
 
@@ -74,6 +82,28 @@ export class LocalDatabase extends Dexie {
         role: 'admin',
         createdAt: new Date()
       });
+    }
+  }
+
+  async seedDefaultCategories() {
+    const categoryCount = await this.categories.count();
+
+    if (categoryCount === 0) {
+      const defaultCategories = [
+        'Groceries',
+        'Beverages',
+        'Snacks',
+        'Personal Care',
+        'Household Items',
+        'Other'
+      ];
+
+      for (const name of defaultCategories) {
+        await this.categories.add({
+          name,
+          createdAt: new Date()
+        });
+      }
     }
   }
 
@@ -97,8 +127,9 @@ export class LocalDatabase extends Dexie {
       products: await this.products.toArray(),
       sales: await this.sales.toArray(),
       saleItems: await this.saleItems.toArray(),
+      categories: await this.categories.toArray(),
       exportDate: new Date().toISOString(),
-      version: 1
+      version: 2
     };
 
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -125,15 +156,18 @@ export class LocalDatabase extends Dexie {
       await this.products.clear();
       await this.sales.clear();
       await this.saleItems.clear();
+      await this.categories.clear();
     }
 
     if (data.users) await this.users.bulkAdd(data.users);
     if (data.products) await this.products.bulkAdd(data.products);
     if (data.sales) await this.sales.bulkAdd(data.sales);
     if (data.saleItems) await this.saleItems.bulkAdd(data.saleItems);
+    if (data.categories) await this.categories.bulkAdd(data.categories);
   }
 }
 
 export const db = new LocalDatabase();
 
 db.seedDefaultAdmin();
+db.seedDefaultCategories();

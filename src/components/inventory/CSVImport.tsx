@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -7,14 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import Papa from "papaparse";
 import { useToast } from "@/hooks/use-toast";
-import { db } from "@/lib/db";
-
-const PRODUCT_CATEGORIES = [
-  'soaps', 'lotions', 'oils', 'deodorants', 'hair_products',
-  'petroleum_jelly', 'toothpaste', 'detergents', 'household_hygiene', 'other'
-] as const;
-
-type ProductCategory = typeof PRODUCT_CATEGORIES[number];
+import { db, Category } from "@/lib/db";
 
 interface CSVRow {
   name: string;
@@ -30,7 +23,7 @@ interface CSVRow {
 interface ParsedProduct {
   name: string;
   brand: string;
-  category: ProductCategory;
+  category: string;
   barcode?: string;
   buyingPrice: number;
   sellingPrice: number;
@@ -56,7 +49,19 @@ export function CSVImport({ open, onOpenChange, onImportSuccess }: CSVImportProp
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState(0);
   const [importResult, setImportResult] = useState<{ success: number; failed: number } | null>(null);
+  const [categories, setCategories] = useState<Category[]>([]);
   const { toast } = useToast();
+
+  useEffect(() => {
+    if (open) {
+      loadCategories();
+    }
+  }, [open]);
+
+  const loadCategories = async () => {
+    const cats = await db.categories.toArray();
+    setCategories(cats);
+  };
 
   const validateRow = (row: CSVRow, rowIndex: number): { valid: boolean; product?: ParsedProduct; errors: ValidationError[] } => {
     const rowErrors: ValidationError[] = [];
@@ -65,10 +70,12 @@ export function CSVImport({ open, onOpenChange, onImportSuccess }: CSVImportProp
       rowErrors.push({ row: rowIndex, field: "name", message: "Product name is required" });
     }
 
+    const validCategories = categories.map(c => c.name.toLowerCase());
+    
     if (!row.category?.trim()) {
       rowErrors.push({ row: rowIndex, field: "category", message: "Category is required" });
-    } else if (!PRODUCT_CATEGORIES.includes(row.category.toLowerCase() as any)) {
-      rowErrors.push({ row: rowIndex, field: "category", message: `Invalid category. Must be one of: ${PRODUCT_CATEGORIES.join(", ")}` });
+    } else if (!validCategories.includes(row.category.toLowerCase())) {
+      rowErrors.push({ row: rowIndex, field: "category", message: `Invalid category. Must be one of: ${categories.map(c => c.name).join(", ")}` });
     }
 
     const buyingPrice = parseFloat(row.buying_price);
@@ -100,7 +107,7 @@ export function CSVImport({ open, onOpenChange, onImportSuccess }: CSVImportProp
       product: {
         name: row.name.trim(),
         brand: row.brand?.trim() || '',
-        category: row.category.toLowerCase() as ProductCategory,
+        category: row.category.trim(),
         barcode: row.barcode?.trim(),
         buyingPrice: buyingPrice,
         sellingPrice: sellingPrice,
@@ -202,10 +209,11 @@ export function CSVImport({ open, onOpenChange, onImportSuccess }: CSVImportProp
   };
 
   const downloadTemplate = () => {
+    const sampleCategory = categories.length > 0 ? categories[0].name : "Groceries";
     const template = [
       ["name", "brand", "category", "barcode", "buying_price", "selling_price", "stock", "reorder_level"],
-      ["Dove Soap Bar", "Dove", "soaps", "123456789", "45.00", "65.00", "50", "10"],
-      ["Nivea Lotion", "Nivea", "lotions", "987654321", "120.00", "180.00", "25", "5"],
+      ["Sample Product 1", "Brand A", sampleCategory, "123456789", "45.00", "65.00", "50", "10"],
+      ["Sample Product 2", "Brand B", sampleCategory, "987654321", "120.00", "180.00", "25", "5"],
     ];
 
     const csv = Papa.unparse(template);
