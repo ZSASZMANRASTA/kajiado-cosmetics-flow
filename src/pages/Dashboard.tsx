@@ -125,33 +125,9 @@ const Dashboard = () => {
       </header>
 
       <main className="container mx-auto p-6">
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <h2 className="text-3xl font-bold">Dashboard</h2>
-            <p className="text-muted-foreground">Welcome back! Select an option to get started.</p>
-          </div>
-          {userRole === 'admin' && (
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={handleExportData}>
-                <Download className="mr-2 h-4 w-4" />
-                Export Backup
-              </Button>
-              <label>
-                <Button variant="outline" asChild>
-                  <span>
-                    <Upload className="mr-2 h-4 w-4" />
-                    Import Backup
-                  </span>
-                </Button>
-                <input
-                  type="file"
-                  accept=".json"
-                  onChange={handleImportData}
-                  className="hidden"
-                />
-              </label>
-            </div>
-          )}
+        <div className="mb-6">
+          <h2 className="text-3xl font-bold">Dashboard</h2>
+          <p className="text-muted-foreground">Welcome back! Select an option to get started.</p>
         </div>
 
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
