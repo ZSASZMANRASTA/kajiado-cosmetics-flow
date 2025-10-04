@@ -144,26 +144,52 @@ export class LocalDatabase extends Dexie {
   }
 
   async importData(file: File) {
-    const text = await file.text();
-    const data = JSON.parse(text);
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
 
-    const shouldClearExisting = confirm(
-      'Do you want to clear existing data before importing? Click OK to clear, Cancel to merge.'
-    );
+      console.log('DB Import: Parsed data', data);
 
-    if (shouldClearExisting) {
-      await this.users.clear();
-      await this.products.clear();
-      await this.sales.clear();
-      await this.saleItems.clear();
-      await this.categories.clear();
+      const shouldClearExisting = confirm(
+        'Do you want to clear existing data before importing? Click OK to clear, Cancel to merge.'
+      );
+
+      if (shouldClearExisting) {
+        console.log('DB Import: Clearing existing data');
+        await this.users.clear();
+        await this.products.clear();
+        await this.sales.clear();
+        await this.saleItems.clear();
+        await this.categories.clear();
+      }
+
+      console.log('DB Import: Adding new data');
+      if (data.users && data.users.length > 0) {
+        await this.users.bulkAdd(data.users);
+        console.log('DB Import: Added', data.users.length, 'users');
+      }
+      if (data.products && data.products.length > 0) {
+        await this.products.bulkAdd(data.products);
+        console.log('DB Import: Added', data.products.length, 'products');
+      }
+      if (data.sales && data.sales.length > 0) {
+        await this.sales.bulkAdd(data.sales);
+        console.log('DB Import: Added', data.sales.length, 'sales');
+      }
+      if (data.saleItems && data.saleItems.length > 0) {
+        await this.saleItems.bulkAdd(data.saleItems);
+        console.log('DB Import: Added', data.saleItems.length, 'sale items');
+      }
+      if (data.categories && data.categories.length > 0) {
+        await this.categories.bulkAdd(data.categories);
+        console.log('DB Import: Added', data.categories.length, 'categories');
+      }
+      
+      console.log('DB Import: Import completed successfully');
+    } catch (error) {
+      console.error('DB Import: Error during import', error);
+      throw new Error(`Import failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-
-    if (data.users) await this.users.bulkAdd(data.users);
-    if (data.products) await this.products.bulkAdd(data.products);
-    if (data.sales) await this.sales.bulkAdd(data.sales);
-    if (data.saleItems) await this.saleItems.bulkAdd(data.saleItems);
-    if (data.categories) await this.categories.bulkAdd(data.categories);
   }
 }
 

@@ -122,10 +122,13 @@ export function CSVImport({ open, onOpenChange, onImportSuccess }: CSVImportProp
     const file = event.target.files?.[0];
     if (!file) return;
 
+    console.log('CSV Import: Starting file upload', file.name);
+
     Papa.parse<CSVRow>(file, {
       header: true,
       skipEmptyLines: true,
       complete: (results) => {
+        console.log('CSV Import: Parsing complete', results);
         const validProducts: ParsedProduct[] = [];
         const allErrors: ValidationError[] = [];
 
@@ -138,6 +141,9 @@ export function CSVImport({ open, onOpenChange, onImportSuccess }: CSVImportProp
           }
         });
 
+        console.log('CSV Import: Valid products', validProducts.length);
+        console.log('CSV Import: Errors', allErrors.length);
+
         setCSVData(validProducts);
         setErrors(allErrors);
         setImportResult(null);
@@ -147,9 +153,16 @@ export function CSVImport({ open, onOpenChange, onImportSuccess }: CSVImportProp
             title: "CSV validated successfully",
             description: `${validProducts.length} products ready to import`,
           });
+        } else if (allErrors.length > 0) {
+          toast({
+            title: "Validation errors found",
+            description: `Found ${allErrors.length} errors in the CSV file`,
+            variant: "destructive",
+          });
         }
       },
       error: (error) => {
+        console.error('CSV Import: Parse error', error);
         toast({
           title: "CSV parsing error",
           description: error.message,
@@ -157,13 +170,25 @@ export function CSVImport({ open, onOpenChange, onImportSuccess }: CSVImportProp
         });
       }
     });
+
+    // Reset file input
+    event.target.value = '';
   };
 
   const handleImport = async () => {
-    if (csvData.length === 0) return;
+    if (csvData.length === 0) {
+      toast({
+        title: "No data to import",
+        description: "Please upload a valid CSV file first",
+        variant: "destructive",
+      });
+      return;
+    }
 
     setImporting(true);
     setProgress(0);
+
+    console.log('CSV Import: Starting import of', csvData.length, 'products');
 
     try {
       let successCount = 0;
@@ -179,9 +204,10 @@ export function CSVImport({ open, onOpenChange, onImportSuccess }: CSVImportProp
             updatedAt: new Date(),
           });
           successCount++;
+          console.log('CSV Import: Imported product', product.name);
         } catch (error) {
           failedCount++;
-          console.error('Product import error:', error);
+          console.error('CSV Import: Failed to import product', product.name, error);
         }
 
         setProgress(Math.round(((i + 1) / csvData.length) * 100));
@@ -189,15 +215,28 @@ export function CSVImport({ open, onOpenChange, onImportSuccess }: CSVImportProp
 
       setImportResult({ success: successCount, failed: failedCount });
 
+      console.log('CSV Import: Completed', { successCount, failedCount });
+
       if (successCount > 0) {
         toast({
           title: "Import completed",
           description: `Successfully imported ${successCount} products${failedCount > 0 ? `, ${failedCount} failed` : ''}`,
         });
         onImportSuccess();
+        
+        // Reset after successful import
+        setTimeout(() => {
+          handleClose();
+        }, 2000);
+      } else {
+        toast({
+          title: "Import failed",
+          description: "No products were imported successfully",
+          variant: "destructive",
+        });
       }
     } catch (error) {
-      console.error('Import error:', error);
+      console.error('CSV Import: Import error', error);
       toast({
         title: "Import failed",
         description: error instanceof Error ? error.message : "An error occurred during import",

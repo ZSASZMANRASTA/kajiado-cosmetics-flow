@@ -39,9 +39,12 @@ const Dashboard = () => {
 
   const handleExportData = async () => {
     try {
+      console.log('Dashboard: Starting data export');
       await db.exportData();
+      console.log('Dashboard: Export successful');
       toast.success('Data exported successfully!');
     } catch (error) {
+      console.error('Dashboard: Export error', error);
       toast.error('Failed to export data');
     }
   };
@@ -50,13 +53,20 @@ const Dashboard = () => {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    console.log('Dashboard: Starting data import', file.name);
+
     try {
       await db.importData(file);
+      console.log('Dashboard: Import successful');
       toast.success('Data imported successfully!');
       loadStats();
     } catch (error) {
-      toast.error('Failed to import data');
+      console.error('Dashboard: Import error', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to import data');
     }
+
+    // Reset file input
+    event.target.value = '';
   };
 
   const menuItems = [
