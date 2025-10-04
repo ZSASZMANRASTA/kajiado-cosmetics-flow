@@ -2,12 +2,14 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowLeft, Download } from 'lucide-react';
+import { ArrowLeft, Download, ChevronDown, ChevronRight } from 'lucide-react';
 import { db } from '@/lib/db';
 import Papa from 'papaparse';
+import { useAuth } from '@/contexts/AuthContext';
 
 const Reports = () => {
   const navigate = useNavigate();
+  const { user, userRole } = useAuth();
   const [stats, setStats] = useState({
     totalSales: 0,
     totalRevenue: 0,
@@ -15,13 +17,24 @@ const Reports = () => {
     salesCount: 0,
   });
   const [recentSales, setRecentSales] = useState<any[]>([]);
+  const [expandedSales, setExpandedSales] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     loadReports();
   }, []);
 
   const loadReports = async () => {
-    const sales = await db.sales.reverse().limit(50).toArray();
+    let salesQuery = db.sales.reverse();
+    
+    // Filter by cashier if not admin
+    if (userRole === 'cashier' && user?.id) {
+      const allSales = await salesQuery.toArray();
+      const filteredSales = allSales.filter(s => s.cashierId === user.id).slice(0, 50);
+      var sales = filteredSales;
+    } else {
+      var sales = await salesQuery.limit(50).toArray();
+    }
+    
     const saleItems = await db.saleItems.toArray();
     const products = await db.products.toArray();
 
@@ -48,7 +61,27 @@ const Reports = () => {
       salesCount: sales.length,
     });
 
-    setRecentSales(sales);
+    // Attach items to each sale
+    const salesWithItems = await Promise.all(
+      sales.map(async (sale) => {
+        const items = saleItems.filter(item => item.saleId === sale.id);
+        return { ...sale, items };
+      })
+    );
+    
+    setRecentSales(salesWithItems);
+  };
+
+  const toggleSaleExpansion = (saleId: number) => {
+    setExpandedSales(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(saleId)) {
+        newSet.delete(saleId);
+      } else {
+        newSet.add(saleId);
+      }
+      return newSet;
+    });
   };
 
   const exportToCSV = async () => {
@@ -150,6 +183,7 @@ const Reports = () => {
               <table className="w-full">
                 <thead>
                   <tr className="border-b">
+                    <th className="p-2 text-left w-8"></th>
                     <th className="p-2 text-left">Receipt</th>
                     <th className="p-2 text-left">Date</th>
                     <th className="p-2 text-left">Cashier</th>
@@ -159,13 +193,55 @@ const Reports = () => {
                 </thead>
                 <tbody>
                   {recentSales.map((sale) => (
-                    <tr key={sale.id} className="border-b hover:bg-muted/50">
-                      <td className="p-2">{sale.receiptNumber}</td>
-                      <td className="p-2">{new Date(sale.createdAt).toLocaleString()}</td>
-                      <td className="p-2">{sale.cashierName}</td>
-                      <td className="p-2 capitalize">{sale.paymentMethod}</td>
-                      <td className="p-2 text-right font-bold">KES {sale.totalAmount.toFixed(2)}</td>
-                    </tr>
+                    <>
+                      <tr 
+                        key={sale.id} 
+                        className="border-b hover:bg-muted/50 cursor-pointer"
+                        onClick={() => toggleSaleExpansion(sale.id)}
+                      >
+                        <td className="p-2">
+                          {expandedSales.has(sale.id) ? (
+                            <ChevronDown className="h-4 w-4" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4" />
+                          )}
+                        </td>
+                        <td className="p-2">{sale.receiptNumber}</td>
+                        <td className="p-2">{new Date(sale.createdAt).toLocaleString()}</td>
+                        <td className="p-2">{sale.cashierName}</td>
+                        <td className="p-2 capitalize">{sale.paymentMethod}</td>
+                        <td className="p-2 text-right font-bold">KES {sale.totalAmount.toFixed(2)}</td>
+                      </tr>
+                      {expandedSales.has(sale.id) && sale.items && sale.items.length > 0 && (
+                        <tr key={`${sale.id}-items`}>
+                          <td colSpan={6} className="p-0">
+                            <div className="bg-muted/30 p-4">
+                              <p className="text-sm font-semibold mb-2">Items Sold:</p>
+                              <table className="w-full text-sm">
+                                <thead>
+                                  <tr className="border-b border-border/50">
+                                    <th className="p-2 text-left">Product</th>
+                                    <th className="p-2 text-right">Qty</th>
+                                    <th className="p-2 text-right">Price</th>
+                                    <th className="p-2 text-right">Subtotal</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {sale.items.map((item: any, idx: number) => (
+                                    <tr key={idx} className="border-b border-border/30">
+                                      <td className="p-2">{item.productName}</td>
+                                      <td className="p-2 text-right">{item.quantity}</td>
+                                      <td className="p-2 text-right">KES {item.price.toFixed(2)}</td>
+                                      <td className="p-2 text-right">KES {item.subtotal.toFixed(2)}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </>
                   ))}
                 </tbody>
               </table>

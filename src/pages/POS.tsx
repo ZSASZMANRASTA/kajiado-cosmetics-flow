@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/contexts/AuthContext';
 import { db, Product } from '@/lib/db';
+import { ReceiptDialog } from '@/components/pos/ReceiptDialog';
 
 interface CartItem {
   productId: number;
@@ -24,6 +25,13 @@ const POS = () => {
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'mpesa' | 'card'>('cash');
   const [processing, setProcessing] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
+  const [showReceiptDialog, setShowReceiptDialog] = useState(false);
+  const [receiptData, setReceiptData] = useState<{
+    receiptNumber: string;
+    items: CartItem[];
+    total: number;
+    paymentMethod: string;
+  } | null>(null);
 
   useEffect(() => {
     loadProducts();
@@ -97,6 +105,12 @@ const POS = () => {
 
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
+  const showReceipt = (receiptNumber: string, items: CartItem[], total: number, paymentMethod: string) => {
+    setReceiptData({ receiptNumber, items, total, paymentMethod });
+    setShowReceiptDialog(true);
+    toast.success('Sale completed successfully!');
+  };
+
   const processPayment = async () => {
     if (cart.length === 0) {
       toast.error('Cart is empty!');
@@ -142,7 +156,8 @@ const POS = () => {
         }
       }
 
-      toast.success(`Sale completed! Receipt: ${receiptNumber}`);
+      // Show receipt dialog
+      showReceipt(receiptNumber, cart, total, paymentMethod);
       setCart([]);
       loadProducts();
     } catch (error: any) {
@@ -243,9 +258,17 @@ const POS = () => {
                       type="number"
                       min="1"
                       value={item.quantity}
-                      onChange={(e) =>
-                        updateQuantity(item.productId, parseInt(e.target.value) || 1)
-                      }
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === '') return; // Allow deletion but don't update
+                        updateQuantity(item.productId, parseInt(val) || 1);
+                      }}
+                      onBlur={(e) => {
+                        // Ensure minimum of 1 when user leaves the field
+                        if (e.target.value === '' || parseInt(e.target.value) < 1) {
+                          updateQuantity(item.productId, 1);
+                        }
+                      }}
                       className="w-20"
                     />
                     <p className="w-24 text-right font-bold">
@@ -304,6 +327,17 @@ const POS = () => {
           </Card>
         </div>
       </main>
+
+      {receiptData && (
+        <ReceiptDialog
+          open={showReceiptDialog}
+          onOpenChange={setShowReceiptDialog}
+          receiptNumber={receiptData.receiptNumber}
+          items={receiptData.items}
+          total={receiptData.total}
+          paymentMethod={receiptData.paymentMethod}
+        />
+      )}
     </div>
   );
 };
