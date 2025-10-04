@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Search, Plus, CreditCard as Edit, Trash2, TriangleAlert as AlertTriangle, Upload } from 'lucide-react';
+import { ArrowLeft, Search, Plus, CreditCard as Edit, Trash2, TriangleAlert as AlertTriangle, Upload, Tag } from 'lucide-react';
 import { CSVImport } from '@/components/inventory/CSVImport';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -19,9 +19,11 @@ const Inventory = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
+  const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [newCategoryName, setNewCategoryName] = useState('');
   const [formData, setFormData] = useState({
     name: '',
     brand: '',
@@ -84,6 +86,58 @@ const Inventory = () => {
       reorderLevel: '10',
     });
     setEditingProduct(null);
+  };
+
+  const handleAddCategory = async () => {
+    if (!newCategoryName.trim()) {
+      toast.error('Please enter a category name');
+      return;
+    }
+
+    try {
+      const existing = await db.categories
+        .filter(c => c.name.toLowerCase() === newCategoryName.trim().toLowerCase())
+        .first();
+
+      if (existing) {
+        toast.error('Category already exists');
+        return;
+      }
+
+      await db.categories.add({
+        name: newCategoryName.trim(),
+        createdAt: new Date()
+      });
+
+      toast.success('Category added successfully!');
+      setNewCategoryName('');
+      loadCategories();
+    } catch (error) {
+      toast.error('Failed to add category');
+    }
+  };
+
+  const handleDeleteCategory = async (categoryId: number, categoryName: string) => {
+    const productsWithCategory = await db.products
+      .filter(p => p.category === categoryName)
+      .count();
+
+    if (productsWithCategory > 0) {
+      toast.error(`Cannot delete category. ${productsWithCategory} product(s) are using this category.`);
+      return;
+    }
+
+    if (!confirm(`Are you sure you want to delete the category "${categoryName}"?`)) {
+      return;
+    }
+
+    try {
+      await db.categories.delete(categoryId);
+      toast.success('Category deleted successfully!');
+      loadCategories();
+    } catch (error) {
+      toast.error('Failed to delete category');
+    }
   };
 
   const handleEdit = (product: Product) => {
@@ -162,6 +216,10 @@ const Inventory = () => {
 
           {userRole === 'admin' && (
             <div className="flex gap-2">
+              <Button onClick={() => setIsCategoryDialogOpen(true)} variant="outline">
+                <Tag className="mr-2 h-4 w-4" />
+                Manage Categories
+              </Button>
               <Button onClick={() => setIsImportOpen(true)} variant="outline">
                 <Upload className="mr-2 h-4 w-4" />
                 Import CSV
@@ -296,6 +354,77 @@ const Inventory = () => {
         onOpenChange={setIsImportOpen}
         onImportSuccess={loadProducts}
       />
+
+      <Dialog open={isCategoryDialogOpen} onOpenChange={setIsCategoryDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Manage Categories</DialogTitle>
+            <DialogDescription>
+              Add or remove product categories for your inventory
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Add New Category</Label>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Category name"
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddCategory();
+                    }
+                  }}
+                />
+                <Button onClick={handleAddCategory}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Existing Categories ({categories.length})</Label>
+              <div className="max-h-[300px] space-y-2 overflow-y-auto rounded-md border p-2">
+                {categories.length === 0 ? (
+                  <p className="py-4 text-center text-sm text-muted-foreground">
+                    No categories yet. Add one above.
+                  </p>
+                ) : (
+                  categories.map((category) => (
+                    <div
+                      key={category.id}
+                      className="flex items-center justify-between rounded-md border bg-card p-3"
+                    >
+                      <span className="font-medium">{category.name}</span>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => handleDeleteCategory(category.id!, category.name)}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <Button
+              onClick={() => {
+                setIsCategoryDialogOpen(false);
+                setNewCategoryName('');
+              }}
+              className="w-full"
+            >
+              Done
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <main className="container mx-auto p-4 space-y-4">
         {lowStockProducts.length > 0 && (
