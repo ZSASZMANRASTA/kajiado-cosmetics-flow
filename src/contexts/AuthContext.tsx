@@ -8,6 +8,7 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
   userRole: 'admin' | 'cashier' | null;
+  isSuperAdmin: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -18,6 +19,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState<'admin' | 'cashier' | null>(null);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -26,6 +28,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const userData = JSON.parse(sessionData);
       setUser(userData);
       setUserRole(userData.role);
+      setIsSuperAdmin(userData.isSuperAdmin || false);
     }
     setLoading(false);
   }, []);
@@ -53,6 +56,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       localStorage.setItem(SESSION_KEY, JSON.stringify(sessionUser));
       setUser(sessionUser);
       setUserRole(user.role);
+      setIsSuperAdmin(user.isSuperAdmin || false);
 
       return { error: null };
     } catch (error) {
@@ -64,11 +68,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     localStorage.removeItem(SESSION_KEY);
     setUser(null);
     setUserRole(null);
+    setIsSuperAdmin(false);
     navigate('/auth');
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, signIn, signOut, userRole }}>
+    <AuthContext.Provider value={{ user, loading, signIn, signOut, userRole, isSuperAdmin }}>
       {children}
     </AuthContext.Provider>
   );

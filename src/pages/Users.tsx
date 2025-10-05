@@ -4,15 +4,17 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ArrowLeft, Plus, Trash2, Eye, EyeOff } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Eye, EyeOff, Shield } from 'lucide-react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { db, User } from '@/lib/db';
+import { useAuth } from '@/contexts/AuthContext';
 
 const Users = () => {
   const navigate = useNavigate();
+  const { isSuperAdmin } = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
   const [showPassword, setShowPassword] = useState(false);
@@ -49,6 +51,11 @@ const Users = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (formData.role === 'admin' && !isSuperAdmin) {
+      toast.error('Only the super admin can create admin accounts');
+      return;
+    }
+
     try {
       const existingUser = await db.users
         .where('email')
@@ -68,6 +75,7 @@ const Users = () => {
         password: hashedPassword,
         fullName: formData.fullName,
         role: formData.role,
+        isSuperAdmin: false,
         createdAt: new Date(),
       });
 
@@ -192,10 +200,15 @@ const Users = () => {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="admin">Admin</SelectItem>
+                        {isSuperAdmin && <SelectItem value="admin">Admin</SelectItem>}
                         <SelectItem value="cashier">Cashier</SelectItem>
                       </SelectContent>
                     </Select>
+                    {!isSuperAdmin && (
+                      <p className="text-xs text-muted-foreground">
+                        Only super admin can create admin accounts
+                      </p>
+                    )}
                   </div>
 
                   <div className="space-y-2">
@@ -263,6 +276,12 @@ const Users = () => {
                       <Badge variant={user.role === 'admin' ? 'default' : 'secondary'}>
                         {user.role}
                       </Badge>
+                      {user.isSuperAdmin && (
+                        <Badge variant="outline" className="gap-1">
+                          <Shield className="h-3 w-3" />
+                          Super Admin
+                        </Badge>
+                      )}
                     </div>
                     <p className="text-sm text-muted-foreground">{user.email}</p>
                     <p className="text-xs text-muted-foreground">
@@ -270,17 +289,19 @@ const Users = () => {
                     </p>
                   </div>
 
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => {
-                      if (confirm(`Delete user ${user.fullName}?`)) {
-                        handleDelete(user.id!);
-                      }
-                    }}
-                  >
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
+                  {!user.isSuperAdmin && (
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => {
+                        if (confirm(`Delete user ${user.fullName}?`)) {
+                          handleDelete(user.id!);
+                        }
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  )}
                 </div>
               ))}
 

@@ -6,6 +6,7 @@ export interface User {
   password: string;
   fullName: string;
   role: 'admin' | 'cashier';
+  isSuperAdmin?: boolean;
   createdAt: Date;
 }
 
@@ -80,6 +81,7 @@ export class LocalDatabase extends Dexie {
         password: hashedPassword,
         fullName: 'System Administrator',
         role: 'admin',
+        isSuperAdmin: true,
         createdAt: new Date()
       });
     }
