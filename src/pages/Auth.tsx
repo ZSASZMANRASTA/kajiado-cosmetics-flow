@@ -6,8 +6,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
-import { ShoppingBag, Loader as Loader2 } from 'lucide-react';
+import { ShoppingBag, Loader as Loader2, Upload } from 'lucide-react';
 import { z } from 'zod';
+import { db } from '@/lib/db';
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -48,6 +49,24 @@ const Auth = () => {
       toast.success('Logged in successfully!');
       navigate('/dashboard');
     }
+  };
+
+  const handleImportData = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    console.log('Auth: Starting data import before login', file.name);
+
+    try {
+      await db.importData(file);
+      console.log('Auth: Import successful');
+      toast.success('Data imported successfully! You can now login with your credentials.');
+    } catch (error) {
+      console.error('Auth: Import error', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to import data');
+    }
+
+    event.target.value = '';
   };
 
   return (
@@ -97,6 +116,26 @@ const Auth = () => {
               Don't have an account? Contact your administrator.
             </p>
           </form>
+
+          <div className="mt-6 border-t pt-4">
+            <p className="mb-2 text-center text-sm text-muted-foreground">
+              New device? Import data from another phone
+            </p>
+            <label>
+              <Button variant="outline" className="w-full" asChild>
+                <span>
+                  <Upload className="mr-2 h-4 w-4" />
+                  Import App Data
+                </span>
+              </Button>
+              <input
+                type="file"
+                accept=".json"
+                onChange={handleImportData}
+                className="hidden"
+              />
+            </label>
+          </div>
         </CardContent>
       </Card>
     </div>
