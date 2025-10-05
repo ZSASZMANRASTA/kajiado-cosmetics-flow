@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ArrowLeft, Download, ChevronDown, ChevronRight } from 'lucide-react';
 import { db } from '@/lib/db';
 import Papa from 'papaparse';
+import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { startOfDay, endOfDay, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
@@ -19,6 +20,7 @@ const Reports = () => {
     salesCount: 0,
   });
   const [recentSales, setRecentSales] = useState<any[]>([]);
+  const [itemStats, setItemStats] = useState<any[]>([]);
   const [expandedSales, setExpandedSales] = useState<Set<number>>(new Set());
   const [dateFilter, setDateFilter] = useState<string>('all');
   const [paymentFilter, setPaymentFilter] = useState<string>('all');
@@ -88,6 +90,46 @@ const Reports = () => {
       salesCount: sales.length,
     });
 
+    // Calculate item statistics
+    const itemStatsMap = new Map<number, {
+      productId: number;
+      productName: string;
+      quantitySold: number;
+      revenue: number;
+      profit: number;
+      salesCount: number;
+    }>();
+
+    for (const sale of sales) {
+      const items = saleItems.filter(item => item.saleId === sale.id);
+      for (const item of items) {
+        const existing = itemStatsMap.get(item.productId);
+        const product = products.find(p => p.id === item.productId);
+        const profit = product ? (item.price - product.buyingPrice) * item.quantity : 0;
+
+        if (existing) {
+          existing.quantitySold += item.quantity;
+          existing.revenue += item.subtotal;
+          existing.profit += profit;
+          existing.salesCount += 1;
+        } else {
+          itemStatsMap.set(item.productId, {
+            productId: item.productId,
+            productName: item.productName,
+            quantitySold: item.quantity,
+            revenue: item.subtotal,
+            profit,
+            salesCount: 1,
+          });
+        }
+      }
+    }
+
+    const sortedItemStats = Array.from(itemStatsMap.values())
+      .sort((a, b) => b.revenue - a.revenue);
+
+    setItemStats(sortedItemStats);
+
     // Attach items to each sale
     const salesWithItems = await Promise.all(
       sales.map(async (sale) => {
@@ -95,7 +137,7 @@ const Reports = () => {
         return { ...sale, items };
       })
     );
-    
+
     setRecentSales(salesWithItems);
   };
 
@@ -112,33 +154,28 @@ const Reports = () => {
   };
 
   const exportToCSV = async () => {
-    const sales = await db.sales.toArray();
-    const saleItems = await db.saleItems.toArray();
-
-    const exportData = [];
-    for (const sale of sales) {
-      const items = saleItems.filter(item => item.saleId === sale.id);
-      for (const item of items) {
-        exportData.push({
-          'Receipt Number': sale.receiptNumber,
-          'Date': new Date(sale.createdAt).toLocaleString(),
-          'Product': item.productName,
-          'Quantity': item.quantity,
-          'Price': item.price,
-          'Subtotal': item.subtotal,
-          'Payment Method': sale.paymentMethod,
-          'Cashier': sale.cashierName,
-          'Total': sale.totalAmount,
-        });
-      }
+    if (itemStats.length === 0) {
+      toast.error('No data to export');
+      return;
     }
 
-    const csv = Papa.unparse(exportData);
+    // Create item statistics CSV
+    const itemExportData = itemStats.map((item, idx) => ({
+      'Rank': idx + 1,
+      'Product': item.productName,
+      'Quantity Sold': item.quantitySold,
+      'Times Sold': item.salesCount,
+      'Revenue (KES)': item.revenue.toFixed(2),
+      'Profit (KES)': item.profit.toFixed(2),
+      'Avg Price (KES)': (item.revenue / item.quantitySold).toFixed(2),
+    }));
+
+    const csv = Papa.unparse(itemExportData);
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `sales-report-${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `product-sales-report-${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -218,6 +255,52 @@ const Reports = () => {
             </CardContent>
           </Card>
         </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Sales by Product</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b">
+                    <th className="p-2 text-left">Product</th>
+                    <th className="p-2 text-right">Qty Sold</th>
+                    <th className="p-2 text-right">Times Sold</th>
+                    <th className="p-2 text-right">Revenue</th>
+                    <th className="p-2 text-right">Profit</th>
+                    <th className="p-2 text-right">Avg Sale</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {itemStats.map((item, idx) => (
+                    <tr key={item.productId} className="border-b hover:bg-muted/50">
+                      <td className="p-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground">#{idx + 1}</span>
+                          <span className="font-medium">{item.productName}</span>
+                        </div>
+                      </td>
+                      <td className="p-2 text-right font-semibold">{item.quantitySold}</td>
+                      <td className="p-2 text-right">{item.salesCount}</td>
+                      <td className="p-2 text-right font-bold">KES {item.revenue.toFixed(2)}</td>
+                      <td className="p-2 text-right font-bold text-green-600">
+                        KES {item.profit.toFixed(2)}
+                      </td>
+                      <td className="p-2 text-right text-sm text-muted-foreground">
+                        KES {(item.revenue / item.quantitySold).toFixed(2)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {itemStats.length === 0 && (
+                <p className="py-8 text-center text-muted-foreground">No product sales data</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
         <Card>
           <CardHeader>
