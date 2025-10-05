@@ -76,8 +76,8 @@ const Auth = () => {
           <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground">
             <ShoppingBag className="h-6 w-6" />
           </div>
-          <CardTitle className="text-2xl font-bold">Cosmetics POS</CardTitle>
-          <CardDescription>Kajiado Shop Management System</CardDescription>
+          <CardTitle className="text-2xl font-bold">Kajiado POS</CardTitle>
+          <CardDescription>Point of Sale System</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
