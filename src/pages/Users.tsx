@@ -14,7 +14,8 @@ import { useAuth } from '@/contexts/AuthContext';
 
 const Users = () => {
   const navigate = useNavigate();
-  const { isSuperAdmin } = useAuth();
+  const { isSuperAdmin, user } = useAuth();
+  const canCreateAdmin = isSuperAdmin || user?.email === 'admin@kajiado.com';
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
   const [showPassword, setShowPassword] = useState(false);
@@ -51,7 +52,7 @@ const Users = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (formData.role === 'admin' && !isSuperAdmin) {
+    if (formData.role === 'admin' && !canCreateAdmin) {
       toast.error('Only the super admin can create admin accounts');
       return;
     }
@@ -200,11 +201,11 @@ const Users = () => {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {isSuperAdmin && <SelectItem value="admin">Admin</SelectItem>}
+                        {canCreateAdmin && <SelectItem value="admin">Admin</SelectItem>}
                         <SelectItem value="cashier">Cashier</SelectItem>
                       </SelectContent>
                     </Select>
-                    {!isSuperAdmin && (
+                    {!canCreateAdmin && (
                       <p className="text-xs text-muted-foreground">
                         Only super admin can create admin accounts
                       </p>
