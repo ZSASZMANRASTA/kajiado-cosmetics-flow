@@ -6,6 +6,8 @@ import { ArrowLeft, Download, ChevronDown, ChevronRight } from 'lucide-react';
 import { db } from '@/lib/db';
 import Papa from 'papaparse';
 import { useAuth } from '@/contexts/AuthContext';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { startOfDay, endOfDay, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
 
 const Reports = () => {
   const navigate = useNavigate();
@@ -18,22 +20,47 @@ const Reports = () => {
   });
   const [recentSales, setRecentSales] = useState<any[]>([]);
   const [expandedSales, setExpandedSales] = useState<Set<number>>(new Set());
+  const [dateFilter, setDateFilter] = useState<string>('all');
+  const [paymentFilter, setPaymentFilter] = useState<string>('all');
 
   useEffect(() => {
     loadReports();
-  }, []);
+  }, [dateFilter, paymentFilter]);
 
   const loadReports = async () => {
     let salesQuery = db.sales.reverse();
     
+    // Get all sales first
+    let sales = await salesQuery.toArray();
+    
     // Filter by cashier if not admin
     if (userRole === 'cashier' && user?.id) {
-      const allSales = await salesQuery.toArray();
-      const filteredSales = allSales.filter(s => s.cashierId === user.id).slice(0, 50);
-      var sales = filteredSales;
-    } else {
-      var sales = await salesQuery.limit(50).toArray();
+      sales = sales.filter(s => s.cashierId === user.id);
     }
+
+    // Filter by date
+    const now = new Date();
+    if (dateFilter === 'today') {
+      const start = startOfDay(now);
+      const end = endOfDay(now);
+      sales = sales.filter(s => new Date(s.createdAt) >= start && new Date(s.createdAt) <= end);
+    } else if (dateFilter === 'this-month') {
+      const start = startOfMonth(now);
+      const end = endOfMonth(now);
+      sales = sales.filter(s => new Date(s.createdAt) >= start && new Date(s.createdAt) <= end);
+    } else if (dateFilter === 'this-year') {
+      const start = startOfYear(now);
+      const end = endOfYear(now);
+      sales = sales.filter(s => new Date(s.createdAt) >= start && new Date(s.createdAt) <= end);
+    }
+
+    // Filter by payment method
+    if (paymentFilter !== 'all') {
+      sales = sales.filter(s => s.paymentMethod === paymentFilter);
+    }
+
+    // Limit to 50 most recent
+    sales = sales.slice(0, 50);
     
     const saleItems = await db.saleItems.toArray();
     const products = await db.products.toArray();
@@ -134,7 +161,36 @@ const Reports = () => {
       </header>
 
       <main className="container mx-auto p-4 space-y-4">
-        <div className="grid gap-4 md:grid-cols-4">
+        <div className="flex gap-4 mb-4">
+          <div className="flex-1">
+            <Select value={dateFilter} onValueChange={setDateFilter}>
+              <SelectTrigger>
+                <SelectValue placeholder="Filter by date" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Time</SelectItem>
+                <SelectItem value="today">Today</SelectItem>
+                <SelectItem value="this-month">This Month</SelectItem>
+                <SelectItem value="this-year">This Year</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex-1">
+            <Select value={paymentFilter} onValueChange={setPaymentFilter}>
+              <SelectTrigger>
+                <SelectValue placeholder="Filter by payment method" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Payment Methods</SelectItem>
+                <SelectItem value="cash">Cash</SelectItem>
+                <SelectItem value="mpesa">M-Pesa</SelectItem>
+                <SelectItem value="card">Card</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-3">
           <Card>
             <CardHeader>
               <CardTitle className="text-sm">Total Sales</CardTitle>
@@ -159,17 +215,6 @@ const Reports = () => {
             </CardHeader>
             <CardContent>
               <p className="text-2xl font-bold text-green-600">KES {stats.totalProfit.toFixed(2)}</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">Avg Sale Value</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-bold">
-                KES {stats.salesCount > 0 ? (stats.totalRevenue / stats.salesCount).toFixed(2) : '0.00'}
-              </p>
             </CardContent>
           </Card>
         </div>
