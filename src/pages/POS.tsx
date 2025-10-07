@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Search, ShoppingCart, Trash2 } from 'lucide-react';
+import { ArrowLeft, Search, ShoppingCart, Trash2, Download } from 'lucide-react';
+import Papa from 'papaparse';
 import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/contexts/AuthContext';
@@ -111,6 +112,48 @@ const POS = () => {
     toast.success('Sale completed successfully!');
   };
 
+  const exportSalesData = async () => {
+    try {
+      const sales = await db.sales
+        .filter(sale => sale.cashierId === user?.id)
+        .reverse()
+        .sortBy('createdAt');
+
+      const salesWithItems = await Promise.all(
+        sales.map(async (sale) => {
+          const items = await db.saleItems
+            .where('saleId')
+            .equals(sale.id!)
+            .toArray();
+
+          return {
+            'Receipt Number': sale.receiptNumber,
+            'Date': new Date(sale.createdAt).toLocaleString(),
+            'Items': items.map(i => `${i.productName} (${i.quantity})`).join(', '),
+            'Total Amount': sale.totalAmount.toFixed(2),
+            'Payment Method': sale.paymentMethod,
+            'Cashier': sale.cashierName,
+          };
+        })
+      );
+
+      const csv = Papa.unparse(salesWithItems);
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `sales_export_${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      toast.success('Sales data exported successfully!');
+    } catch (error) {
+      toast.error('Failed to export sales data');
+    }
+  };
+
   const processPayment = async () => {
     if (cart.length === 0) {
       toast.error('Cart is empty!');
@@ -169,16 +212,20 @@ const POS = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-secondary/5">
-      <header className="border-b bg-card/50 backdrop-blur-sm p-4">
-        <div className="container mx-auto flex items-center gap-4">
+      <header className="border-b bg-card/50 backdrop-blur-sm p-3 md:p-4">
+        <div className="container mx-auto flex items-center gap-2 md:gap-4">
           <Button variant="ghost" size="icon" onClick={() => navigate('/dashboard')}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <h1 className="text-2xl font-bold">Point of Sale</h1>
+          <h1 className="text-xl md:text-2xl font-bold flex-1">Point of Sale</h1>
+          <Button variant="outline" size="sm" onClick={exportSalesData} className="gap-2">
+            <Download className="h-4 w-4" />
+            <span className="hidden sm:inline">Export Sales</span>
+          </Button>
         </div>
       </header>
 
-      <main className="container mx-auto grid gap-4 p-4 md:grid-cols-2">
+      <main className="container mx-auto grid gap-3 md:gap-4 p-3 md:p-4 md:grid-cols-2">
         <div className="space-y-4">
           <Card>
             <CardHeader>
