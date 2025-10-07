@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { startOfDay, endOfDay, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
+import { SalesCSVImport } from '@/components/reports/SalesCSVImport';
 
 const Reports = () => {
   const navigate = useNavigate();
@@ -190,10 +191,13 @@ const Reports = () => {
             </Button>
             <h1 className="text-2xl font-bold">Sales Reports</h1>
           </div>
-          <Button onClick={exportToCSV}>
-            <Download className="mr-2 h-4 w-4" />
-            Export to CSV
-          </Button>
+          <div className="flex gap-2">
+            {userRole === 'admin' && <SalesCSVImport />}
+            <Button onClick={exportToCSV}>
+              <Download className="mr-2 h-4 w-4" />
+              Export to CSV
+            </Button>
+          </div>
         </div>
       </header>
 
