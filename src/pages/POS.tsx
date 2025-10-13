@@ -303,17 +303,18 @@ const POS = () => {
                     </div>
                     <Input
                       type="number"
-                      min="1"
+                      step="0.01"
+                      min="0.01"
                       value={item.quantity}
                       onChange={(e) => {
                         const val = e.target.value;
                         if (val === '') return; // Allow deletion but don't update
-                        updateQuantity(item.productId, parseInt(val) || 1);
+                        updateQuantity(item.productId, parseFloat(val) || 0.01);
                       }}
                       onBlur={(e) => {
                         // Ensure minimum of 1 when user leaves the field
-                        if (e.target.value === '' || parseInt(e.target.value) < 1) {
-                          updateQuantity(item.productId, 1);
+                        if (e.target.value === '' || parseFloat(e.target.value) < 0.01) {
+                          updateQuantity(item.productId, 0.01);
                         }
                       }}
                       className="w-20"
