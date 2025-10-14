@@ -15,7 +15,8 @@ interface CartItem {
   productId: number;
   name: string;
   price: number;
-  quantity: number;
+  // allow temporary string while typing
+  quantity: number | string;
 }
 
 const POS = () => {
@@ -93,14 +94,14 @@ const POS = () => {
   };
 
   const updateQuantity = (productId: number, newQuantity: number) => {
-  if (newQuantity === null || isNaN(newQuantity)) return;
-
-  // Don’t auto-remove while typing
+  if (isNaN(newQuantity) || newQuantity < 1) {
+    // keep same behaviour on final invalid (you can choose to remove or set to 1)
+    removeFromCart(productId);
+    return;
+  }
   setCart((prev) =>
     prev.map((item) =>
-      item.productId === productId
-        ? { ...item, quantity: Math.max(0, newQuantity) }
-        : item
+      item.productId === productId ? { ...item, quantity: newQuantity } : item
     )
   );
 };
@@ -305,27 +306,33 @@ const POS = () => {
                     <Input
   type="text"
   inputMode="decimal"
-  value={item.quantity.toString()}
+  value={typeof item.quantity === 'number' ? item.quantity.toString() : item.quantity}
   onChange={(e) => {
-    const val = e.target.value;
+    let val = e.target.value;
+    // allow comma from some keyboards, convert to dot
+    val = val.replace(',', '.');
 
-    // allow empty and decimal typing
+    // allow empty string or partial decimal like "1." ".5" or "12.34"
     if (val === '' || /^\d*\.?\d*$/.test(val)) {
       setCart((prev) =>
         prev.map((cartItem) =>
           cartItem.productId === item.productId
-            ? { ...cartItem, quantity: val === '' ? 0 : parseFloat(val) }
+            ? { ...cartItem, quantity: val }
             : cartItem
         )
       );
     }
   }}
   onBlur={(e) => {
-    const val = parseFloat(e.target.value);
-    if (isNaN(val) || val <= 0) {
-      updateQuantity(item.productId, 1); // restore default
+    // convert comma -> dot and parse
+    const raw = e.target.value.replace(',', '.');
+    const parsed = parseFloat(raw);
+
+    if (isNaN(parsed) || parsed <= 0) {
+      // user left it blank/invalid -> restore to 1
+      updateQuantity(item.productId, 1);
     } else {
-      updateQuantity(item.productId, val);
+      updateQuantity(item.productId, parsed);
     }
   }}
   className="w-20"
