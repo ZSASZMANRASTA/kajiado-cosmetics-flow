@@ -159,16 +159,16 @@ const Inventory = () => {
     e.preventDefault();
     try {
       const productData = {
-        name: formData.name,
-        brand: formData.brand,
-        category: formData.category,
-        barcode: formData.barcode,
-        buyingPrice: parseFloat(formData.buyingPrice),
-        sellingPrice: parseFloat(formData.sellingPrice),
-        stock: parseInt(formData.stock),
-        reorderLevel: parseInt(formData.reorderLevel),
-        updatedAt: new Date(),
-      };
+  name: formData.name,
+  brand: formData.brand,
+  category: formData.category,
+  barcode: formData.barcode,
+  buyingPrice: parseFloat(formData.buyingPrice),
+  sellingPrice: parseFloat(formData.sellingPrice),
+  stock: parseFloat(formData.stock),
+  reorderLevel: parseFloat(formData.reorderLevel),
+  updatedAt: new Date(),
+};
 
       if (editingProduct) {
         await db.products.update(editingProduct.id!, productData);
@@ -310,6 +310,7 @@ const Inventory = () => {
                       <Input
                         id="stock"
                         type="number"
+                        step="0.01"
                         value={formData.stock}
                         onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
                         required
@@ -320,6 +321,7 @@ const Inventory = () => {
                       <Input
                         id="reorderLevel"
                         type="number"
+                        step="0.01"
                         value={formData.reorderLevel}
                         onChange={(e) => setFormData({ ...formData, reorderLevel: e.target.value })}
                         required
