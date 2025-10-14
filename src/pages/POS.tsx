@@ -93,16 +93,17 @@ const POS = () => {
   };
 
   const updateQuantity = (productId: number, newQuantity: number) => {
-    if (newQuantity < 1) {
-      removeFromCart(productId);
-      return;
-    }
-    setCart(prev =>
-      prev.map(item =>
-        item.productId === productId ? { ...item, quantity: newQuantity } : item
-      )
-    );
-  };
+  if (newQuantity === null || isNaN(newQuantity)) return;
+
+  // Don’t auto-remove while typing
+  setCart((prev) =>
+    prev.map((item) =>
+      item.productId === productId
+        ? { ...item, quantity: Math.max(0, newQuantity) }
+        : item
+    )
+  );
+};
 
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
@@ -302,17 +303,29 @@ const POS = () => {
                       </p>
                     </div>
                     <Input
-  type="number"
-  step="0.01"
-  min="0"
-  value={item.quantity === 0 ? '' : item.quantity}
+  type="text"
+  inputMode="decimal"
+  value={item.quantity.toString()}
   onChange={(e) => {
     const val = e.target.value;
-    updateQuantity(item.productId, val === '' ? 0 : parseFloat(val));
+
+    // allow empty and decimal typing
+    if (val === '' || /^\d*\.?\d*$/.test(val)) {
+      setCart((prev) =>
+        prev.map((cartItem) =>
+          cartItem.productId === item.productId
+            ? { ...cartItem, quantity: val === '' ? 0 : parseFloat(val) }
+            : cartItem
+        )
+      );
+    }
   }}
   onBlur={(e) => {
-    if (e.target.value === '' || parseFloat(e.target.value) <= 0) {
-      updateQuantity(item.productId, 1);
+    const val = parseFloat(e.target.value);
+    if (isNaN(val) || val <= 0) {
+      updateQuantity(item.productId, 1); // restore default
+    } else {
+      updateQuantity(item.productId, val);
     }
   }}
   className="w-20"
