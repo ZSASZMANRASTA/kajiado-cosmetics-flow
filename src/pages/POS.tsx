@@ -380,13 +380,17 @@ const POS = () => {
                   </div>
 
                   <Button
-                    className="w-full"
-                    size="lg"
-                    onClick={processPayment}
-                    disabled={processing}
-                  >
-                    {processing ? 'Processing...' : 'Complete Sale'}
-                  </Button>
+  className="w-full"
+  size="lg"
+  onClick={() => {
+    if (window.confirm('Confirm sale before generating receipt?')) {
+      processPayment();
+    }
+  }}
+  disabled={processing}
+>
+  {processing ? 'Processing...' : 'Complete Sale'}
+</Button>
                 </>
               )}
             </CardContent>
