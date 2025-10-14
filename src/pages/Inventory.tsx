@@ -308,24 +308,41 @@ const Inventory = () => {
                     <div className="space-y-2">
                       <Label htmlFor="stock">Quantity in Stock *</Label>
                       <Input
-                        id="stock"
-                        type="number"
-                        step="0.01"
-                        value={formData.stock}
-                        onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
-                        required
-                      />
+  id="stock"
+  type="text"
+  inputMode="decimal"
+  value={formData.stock}
+  onChange={(e) => {
+    let val = e.target.value.replace(',', '.');            // accept comma as decimal
+    // allow empty or partial decimals like "1.", ".5", "12.34"
+    if (val === '' || /^\d*\.?\d*$/.test(val)) {
+      setFormData((prev) => ({ ...prev, stock: val }));
+    }
+  }}
+  onBlur={() =>
+    setFormData((prev) => ({ ...prev, stock: (prev.stock === '' ? '0' : (parseFloat(prev.stock) || 0).toString()) }))
+  }
+  required
+/>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="reorderLevel">Low Stock Alert *</Label>
                       <Input
-                        id="reorderLevel"
-                        type="number"
-                        step="0.01"
-                        value={formData.reorderLevel}
-                        onChange={(e) => setFormData({ ...formData, reorderLevel: e.target.value })}
-                        required
-                      />
+  id="reorderLevel"
+  type="text"
+  inputMode="decimal"
+  value={formData.reorderLevel}
+  onChange={(e) => {
+    let val = e.target.value.replace(',', '.');
+    if (val === '' || /^\d*\.?\d*$/.test(val)) {
+      setFormData((prev) => ({ ...prev, reorderLevel: val }));
+    }
+  }}
+  onBlur={() =>
+    setFormData((prev) => ({ ...prev, reorderLevel: (prev.reorderLevel === '' ? '0' : (parseFloat(prev.reorderLevel) || 0).toString()) }))
+  }
+  required
+/>
                     </div>
                   </div>
                   <div className="flex gap-2">
