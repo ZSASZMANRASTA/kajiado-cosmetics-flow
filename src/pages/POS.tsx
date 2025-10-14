@@ -302,23 +302,21 @@ const POS = () => {
                       </p>
                     </div>
                     <Input
-                      type="number"
-                      step="0.01"
-                      min="0.01"
-                      value={item.quantity}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (val === '') return; // Allow deletion but don't update
-                        updateQuantity(item.productId, parseFloat(val) || 0.01);
-                      }}
-                      onBlur={(e) => {
-                        // Ensure minimum of 1 when user leaves the field
-                        if (e.target.value === '' || parseFloat(e.target.value) < 0.01) {
-                          updateQuantity(item.productId, 0.01);
-                        }
-                      }}
-                      className="w-20"
-                    />
+  type="number"
+  step="0.01"
+  min="0"
+  value={item.quantity === 0 ? '' : item.quantity}
+  onChange={(e) => {
+    const val = e.target.value;
+    updateQuantity(item.productId, val === '' ? 0 : parseFloat(val));
+  }}
+  onBlur={(e) => {
+    if (e.target.value === '' || parseFloat(e.target.value) <= 0) {
+      updateQuantity(item.productId, 1);
+    }
+  }}
+  className="w-20"
+/>
                     <p className="w-24 text-right font-bold">
                       KES {(item.price * item.quantity).toFixed(2)}
                     </p>
