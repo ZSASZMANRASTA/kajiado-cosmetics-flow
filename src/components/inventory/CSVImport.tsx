@@ -296,12 +296,7 @@ export function CSVImport({ open, onOpenChange, onImportSuccess }: CSVImportProp
                   Upload CSV
                 </span>
               </Button>
-              <input
-                type="file"
-                accept=".csv"
-                onChange={handleFileUpload}
-                className="hidden"
-              />
+              <input type="file" accept=".csv,text/csv,*/*"            onChange={handleFileUpload} className="hidden" />
             </label>
           </div>
 
