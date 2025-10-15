@@ -75,8 +75,10 @@ export function CSVImport({ open, onOpenChange, onImportSuccess }: CSVImportProp
     if (!row.category?.trim()) {
       rowErrors.push({ row: rowIndex, field: "category", message: "Category is required" });
     } else if (!validCategories.includes(row.category.toLowerCase())) {
-      rowErrors.push({ row: rowIndex, field: "category", message: `Invalid category. Must be one of: ${categories.map(c => c.name).join(", ")}` });
-    }
+  // Auto-create new category instead of blocking
+  const newCategory = { name: row.category.trim(), createdAt: new Date() };
+  await db.categories.add(newCategory);
+}
 
     const buyingPrice = parseFloat(row.buying_price);
     if (isNaN(buyingPrice) || buyingPrice < 0) {
