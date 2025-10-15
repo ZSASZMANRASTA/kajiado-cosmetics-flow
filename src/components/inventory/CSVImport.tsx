@@ -134,14 +134,14 @@ export function CSVImport({ open, onOpenChange, onImportSuccess }: CSVImportProp
         const validProducts: ParsedProduct[] = [];
         const allErrors: ValidationError[] = [];
 
-        results.data.forEach((row, index) => {
-          const validation = validateRow(row, index + 2);
-          if (validation.valid && validation.product) {
-            validProducts.push(validation.product);
-          } else {
-            allErrors.push(...validation.errors);
-          }
-        });
+        for (const [index, row] of results.data.entries()) {
+  const validation = await validateRow(row, index + 2);
+  if (validation.valid && validation.product) {
+    validProducts.push(validation.product);
+  } else {
+    allErrors.push(...validation.errors);
+  }
+}
 
         console.log('CSV Import: Valid products', validProducts.length);
         console.log('CSV Import: Errors', allErrors.length);
