@@ -88,7 +88,7 @@ export function CSVImport({ open, onOpenChange, onImportSuccess }: CSVImportProp
       rowErrors.push({ row: rowIndex, field: "selling_price", message: "Selling price must be a positive number" });
     }
 
-    const quantity = parseInt(row.stock);
+    const quantity = parseFloat(row.stock);
     if (isNaN(quantity) || quantity < 0) {
       rowErrors.push({ row: rowIndex, field: "stock", message: "Quantity must be a non-negative number" });
     }
