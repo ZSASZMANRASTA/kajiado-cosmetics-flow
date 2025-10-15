@@ -384,7 +384,7 @@ export function CSVImport({ open, onOpenChange, onImportSuccess }: CSVImportProp
                 </Button>
                 <Button
                   onClick={handleImport}
-                  disabled={importing || csvData.length === 0 || errors.length > 0}
+                  disabled={importing || csvData.length === 0}
                 >
                   <Upload className="mr-2 h-4 w-4" />
                   Import {csvData.length} Products
