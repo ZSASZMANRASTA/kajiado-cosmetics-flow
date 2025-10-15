@@ -129,7 +129,7 @@ export function CSVImport({ open, onOpenChange, onImportSuccess }: CSVImportProp
     Papa.parse<CSVRow>(file, {
       header: true,
       skipEmptyLines: true,
-      complete: (results) => {
+      complete: async (results) => {
         console.log('CSV Import: Parsing complete', results);
         const validProducts: ParsedProduct[] = [];
         const allErrors: ValidationError[] = [];
@@ -298,7 +298,7 @@ export function CSVImport({ open, onOpenChange, onImportSuccess }: CSVImportProp
                   Upload CSV
                 </span>
               </Button>
-              <input type="file" accept=".csv,text/csv,*/*"            onChange={handleFileUpload} className="hidden" />
+              <input type="file" accept="*/*"            onChange={handleFileUpload} className="hidden" />
             </label>
           </div>
 
