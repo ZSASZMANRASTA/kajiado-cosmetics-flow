@@ -63,7 +63,7 @@ export function CSVImport({ open, onOpenChange, onImportSuccess }: CSVImportProp
     setCategories(cats);
   };
 
-  const validateRow = (row: CSVRow, rowIndex: number): { valid: boolean; product?: ParsedProduct; errors: ValidationError[] } => {
+  const validateRow = async (row: CSVRow, rowIndex: number): Promise<{ valid: boolean; product?: ParsedProduct; errors: ValidationError[] }> => {
     const rowErrors: ValidationError[] = [];
 
     if (!row.name?.trim()) {
