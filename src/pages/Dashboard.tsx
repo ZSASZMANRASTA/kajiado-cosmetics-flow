@@ -38,16 +38,77 @@ const Dashboard = () => {
   };
 
   const handleExportData = async () => {
-    try {
-      console.log('Dashboard: Starting data export');
-      await db.exportData();
-      console.log('Dashboard: Export successful');
+  try {
+    console.log('Dashboard: Starting data export');
+    const exported = await db.exportData();
+    console.log('Dashboard: export returned ->', exported);
+
+    // If exportData returned nothing, we can't build a file here.
+    // Some implementations may itself trigger a download and return undefined.
+    if (exported === undefined || exported === null) {
+      console.log('Dashboard: exportData returned no payload — assuming it handled download (or failed silently).');
       toast.success('Data exported successfully!');
-    } catch (error) {
-      console.error('Dashboard: Export error', error);
-      toast.error('Failed to export data');
+      return;
     }
-  };
+
+    // Normalize to a Blob
+    let blob: Blob;
+    if (exported instanceof Blob) {
+      blob = exported;
+    } else if (typeof exported === 'string') {
+      blob = new Blob([exported], { type: 'application/json' });
+    } else {
+      // likely an object
+      blob = new Blob([JSON.stringify(exported, null, 2)], { type: 'application/json' });
+    }
+
+    const fileName = `kajiado-backup-${new Date().toISOString().split('T')[0]}.json`;
+
+    // Try File System Access API first (best for direct save on device)
+    // Note: showSaveFilePicker is available in Chromium-based browsers and requires secure context (HTTPS or localhost).
+    // Use (window as any) to avoid TS errors if you don't have lib.dom types for this API.
+    const maybeShowSaveFilePicker = (window as any).showSaveFilePicker;
+    if (maybeShowSaveFilePicker) {
+      try {
+        const handle = await (window as any).showSaveFilePicker({
+          suggestedName: fileName,
+          types: [
+            {
+              description: 'JSON Backup',
+              accept: { 'application/json': ['.json'] },
+            },
+          ],
+        });
+        const writable = await handle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        console.log('Dashboard: Export successful via File System Access API');
+        toast.success('Data exported successfully!');
+        return;
+      } catch (fsError) {
+        // If user cancels save dialog or API fails, fall back to anchor download
+        console.warn('Dashboard: File System Access API failed or was cancelled, falling back to anchor download', fsError);
+      }
+    }
+
+    // Fallback: anchor download
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    // Append to DOM for better cross-browser support (some browsers require it)
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+
+    console.log('Dashboard: Export successful (anchor download triggered)');
+    toast.success('Data exported successfully!');
+  } catch (error) {
+    console.error('Dashboard: Export error', error);
+    toast.error('Failed to export data');
+  }
+};
 
   const handleImportData = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
