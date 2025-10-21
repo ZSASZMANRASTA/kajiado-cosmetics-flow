@@ -10,11 +10,21 @@ interface ReceiptDialogProps {
   items: Array<{
     name: string;
     quantity: number;
-    price: number;
+    price: number; // unit price (VAT-inclusive)
   }>;
-  total: number;
+  total: number; // total (VAT-inclusive)
   paymentMethod: string;
 }
+
+const VAT_RATE = 0.16; // 16%
+const VAT_INCLUSIVE = true;
+
+const calculateVAT = (amount: number) => {
+  if (VAT_INCLUSIVE) {
+    return amount * VAT_RATE / (1 + VAT_RATE);
+  }
+  return amount * VAT_RATE;
+};
 
 export const ReceiptDialog = ({
   open,
@@ -24,31 +34,51 @@ export const ReceiptDialog = ({
   total,
   paymentMethod,
 }: ReceiptDialogProps) => {
+  const now = new Date();
+  // Build per-item data (subtotal, vat, net)
+  const itemsWithVat = items.map((item) => {
+    const subtotal = Number(item.price) * Number(item.quantity);
+    const vat = calculateVAT(subtotal);
+    const net = subtotal - vat;
+    return { ...item, subtotal, vat, net };
+  });
+
+  const totalVAT = itemsWithVat.reduce((acc, it) => acc + it.vat, 0);
+  const totalNet = Number(total) - totalVAT;
+
   const receiptContent = `
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     KAJIADO POS SYSTEM
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Receipt: ${receiptNumber}
-Date: ${new Date().toLocaleString()}
+Date: ${now.toLocaleString()}
 Payment: ${paymentMethod.toUpperCase()}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ITEMS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-${items.map(item => 
-  `${item.name}\n${item.quantity} x KES ${item.price.toFixed(2)} = KES ${(item.quantity * item.price).toFixed(2)}`
-).join('\n\n')}
+${itemsWithVat
+  .map(
+    (it) =>
+      `${it.name}
+  ${it.quantity} x KES ${it.price.toFixed(2)} = KES ${it.subtotal.toFixed(2)}
+    VAT: KES ${it.vat.toFixed(2)}  Net: KES ${it.net.toFixed(2)}`
+  )
+  .join('\n\n')}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-TOTAL: KES ${total.toFixed(2)}
+VAT (${Math.round(VAT_RATE * 100)}%): KES ${totalVAT.toFixed(2)}
+Amount (Excl. VAT): KES ${totalNet.toFixed(2)}
+
+TOTAL (Incl. VAT): KES ${Number(total).toFixed(2)}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    Thank you for shopping!
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  `;
+`;
 
   const handlePrint = () => {
     const printWindow = window.open('', '_blank');
@@ -75,7 +105,7 @@ TOTAL: KES ${total.toFixed(2)}
               }
             </style>
           </head>
-          <body>${receiptContent}</body>
+          <body><pre>${receiptContent}</pre></body>
         </html>
       `);
       printWindow.document.close();
@@ -119,6 +149,39 @@ TOTAL: KES ${total.toFixed(2)}
             <pre className="text-xs font-mono whitespace-pre-wrap">
               {receiptContent}
             </pre>
+          </div>
+
+          <div className="overflow-x-auto bg-card/10 p-2 rounded">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b">
+                  <th className="p-1 text-left">Product</th>
+                  <th className="p-1 text-right">Qty</th>
+                  <th className="p-1 text-right">Unit</th>
+                  <th className="p-1 text-right">Subtotal</th>
+                  <th className="p-1 text-right">VAT</th>
+                  <th className="p-1 text-right">Net</th>
+                </tr>
+              </thead>
+              <tbody>
+                {itemsWithVat.map((it, idx) => (
+                  <tr key={idx} className="border-b">
+                    <td className="p-1">{it.name}</td>
+                    <td className="p-1 text-right">{it.quantity}</td>
+                    <td className="p-1 text-right">KES {it.price.toFixed(2)}</td>
+                    <td className="p-1 text-right">KES {it.subtotal.toFixed(2)}</td>
+                    <td className="p-1 text-right">KES {it.vat.toFixed(2)}</td>
+                    <td className="p-1 text-right">KES {it.net.toFixed(2)}</td>
+                  </tr>
+                ))}
+                <tr>
+                  <td colSpan={3} className="p-1 font-semibold">Totals</td>
+                  <td className="p-1 text-right font-semibold">KES {Number(total).toFixed(2)}</td>
+                  <td className="p-1 text-right font-semibold">KES {totalVAT.toFixed(2)}</td>
+                  <td className="p-1 text-right font-semibold">KES {totalNet.toFixed(2)}</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
 
           <div className="flex gap-2">
