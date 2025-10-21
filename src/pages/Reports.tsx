@@ -11,6 +11,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { startOfDay, endOfDay, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
 import { SalesCSVImport } from '@/components/reports/SalesCSVImport';
 
+// VAT settings
+const VAT_RATE = 0.16; // 16%
+const VAT_INCLUSIVE = true; // prices are VAT-inclusive
+
 const Reports = () => {
   const navigate = useNavigate();
   const { user, userRole } = useAuth();
@@ -19,6 +23,8 @@ const Reports = () => {
     totalRevenue: 0,
     totalProfit: 0,
     salesCount: 0,
+    totalVAT: 0,
+    netRevenue: 0,
   });
   const [recentSales, setRecentSales] = useState<any[]>([]);
   const [itemStats, setItemStats] = useState<any[]>([]);
@@ -30,12 +36,20 @@ const Reports = () => {
     loadReports();
   }, [dateFilter, paymentFilter]);
 
+  const calculateVATForAmount = (amount: number) => {
+    if (VAT_INCLUSIVE) {
+      return amount * VAT_RATE / (1 + VAT_RATE);
+    } else {
+      return amount * VAT_RATE;
+    }
+  };
+
   const loadReports = async () => {
     let salesQuery = db.sales.reverse();
-    
+
     // Get all sales first
     let sales = await salesQuery.toArray();
-    
+
     // Filter by cashier if not admin
     if (userRole === 'cashier' && user?.id) {
       sales = sales.filter(s => s.cashierId === user.id);
@@ -64,12 +78,13 @@ const Reports = () => {
 
     // Limit to 50 most recent
     sales = sales.slice(0, 50);
-    
+
     const saleItems = await db.saleItems.toArray();
     const products = await db.products.toArray();
 
     let totalRevenue = 0;
     let totalProfit = 0;
+    let totalVAT = 0;
 
     for (const sale of sales) {
       totalRevenue += sale.totalAmount;
@@ -81,14 +96,21 @@ const Reports = () => {
           const profit = (item.price - product.buyingPrice) * item.quantity;
           totalProfit += profit;
         }
+        // Compute VAT per item (authoritative) and accumulate
+        const itemVAT = calculateVATForAmount(item.subtotal);
+        totalVAT += itemVAT;
       }
     }
+
+    const netRevenue = totalRevenue - totalVAT;
 
     setStats({
       totalSales: sales.length,
       totalRevenue,
       totalProfit,
       salesCount: sales.length,
+      totalVAT,
+      netRevenue,
     });
 
     // Calculate item statistics
@@ -96,9 +118,11 @@ const Reports = () => {
       productId: number;
       productName: string;
       quantitySold: number;
-      revenue: number;
+      revenue: number; // gross (includes VAT)
       profit: number;
       salesCount: number;
+      vat: number;
+      netRevenue: number;
     }>();
 
     for (const sale of sales) {
@@ -107,12 +131,16 @@ const Reports = () => {
         const existing = itemStatsMap.get(item.productId);
         const product = products.find(p => p.id === item.productId);
         const profit = product ? (item.price - product.buyingPrice) * item.quantity : 0;
+        const itemVAT = calculateVATForAmount(item.subtotal);
+        const itemNet = item.subtotal - itemVAT;
 
         if (existing) {
           existing.quantitySold += item.quantity;
           existing.revenue += item.subtotal;
           existing.profit += profit;
           existing.salesCount += 1;
+          existing.vat += itemVAT;
+          existing.netRevenue += itemNet;
         } else {
           itemStatsMap.set(item.productId, {
             productId: item.productId,
@@ -121,6 +149,8 @@ const Reports = () => {
             revenue: item.subtotal,
             profit,
             salesCount: 1,
+            vat: itemVAT,
+            netRevenue: itemNet,
           });
         }
       }
@@ -131,11 +161,19 @@ const Reports = () => {
 
     setItemStats(sortedItemStats);
 
-    // Attach items to each sale
+    // Attach items to each sale (include VAT/net per item and per sale)
     const salesWithItems = await Promise.all(
       sales.map(async (sale) => {
-        const items = saleItems.filter(item => item.saleId === sale.id);
-        return { ...sale, items };
+        const items = saleItems
+          .filter(item => item.saleId === sale.id)
+          .map(item => {
+            const vat = calculateVATForAmount(item.subtotal);
+            const net = item.subtotal - vat;
+            return { ...item, vat, net };
+          });
+        const saleVAT = items.reduce((acc, it) => acc + it.vat, 0);
+        const saleNet = sale.totalAmount - saleVAT;
+        return { ...sale, items, saleVAT, saleNet };
       })
     );
 
@@ -160,15 +198,17 @@ const Reports = () => {
       return;
     }
 
-    // Create item statistics CSV
+    // Create item statistics CSV (adding VAT and Net Revenue columns)
     const itemExportData = itemStats.map((item, idx) => ({
       'Rank': idx + 1,
       'Product': item.productName,
       'Quantity Sold': item.quantitySold,
       'Times Sold': item.salesCount,
-      'Revenue (KES)': item.revenue.toFixed(2),
+      'Revenue (Gross KES)': item.revenue.toFixed(2),
+      'VAT (KES)': item.vat.toFixed(2),
+      'Net Revenue (KES)': item.netRevenue.toFixed(2),
       'Profit (KES)': item.profit.toFixed(2),
-      'Avg Price (KES)': (item.revenue / item.quantitySold).toFixed(2),
+      'Avg Price (KES)': (item.quantitySold ? (item.revenue / item.quantitySold) : 0).toFixed(2),
     }));
 
     const csv = Papa.unparse(itemExportData);
@@ -179,6 +219,8 @@ const Reports = () => {
     a.download = `product-sales-report-${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+
+    toast.success('Product sales CSV exported (now includes VAT and Net Revenue columns)');
   };
 
   return (
@@ -231,7 +273,7 @@ const Reports = () => {
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-4">
           <Card>
             <CardHeader>
               <CardTitle className="text-sm">Total Sales</CardTitle>
@@ -243,10 +285,28 @@ const Reports = () => {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm">Total Revenue</CardTitle>
+              <CardTitle className="text-sm">Total Revenue (Gross)</CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-2xl font-bold">KES {stats.totalRevenue.toFixed(2)}</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">VAT Collected</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-bold text-amber-600">KES {stats.totalVAT.toFixed(2)}</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">Net Revenue (Excl. VAT)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-bold">KES {stats.netRevenue.toFixed(2)}</p>
             </CardContent>
           </Card>
 
@@ -272,7 +332,9 @@ const Reports = () => {
                     <th className="p-2 text-left">Product</th>
                     <th className="p-2 text-right">Qty Sold</th>
                     <th className="p-2 text-right">Times Sold</th>
-                    <th className="p-2 text-right">Revenue</th>
+                    <th className="p-2 text-right">Revenue (Gross)</th>
+                    <th className="p-2 text-right">VAT</th>
+                    <th className="p-2 text-right">Net Revenue</th>
                     <th className="p-2 text-right">Profit</th>
                     <th className="p-2 text-right">Avg Sale</th>
                   </tr>
@@ -289,11 +351,13 @@ const Reports = () => {
                       <td className="p-2 text-right font-semibold">{item.quantitySold}</td>
                       <td className="p-2 text-right">{item.salesCount}</td>
                       <td className="p-2 text-right font-bold">KES {item.revenue.toFixed(2)}</td>
+                      <td className="p-2 text-right">KES {item.vat.toFixed(2)}</td>
+                      <td className="p-2 text-right">KES {item.netRevenue.toFixed(2)}</td>
                       <td className="p-2 text-right font-bold text-green-600">
                         KES {item.profit.toFixed(2)}
                       </td>
                       <td className="p-2 text-right text-sm text-muted-foreground">
-                        KES {(item.revenue / item.quantitySold).toFixed(2)}
+                        KES {(item.quantitySold ? (item.revenue / item.quantitySold) : 0).toFixed(2)}
                       </td>
                     </tr>
                   ))}
@@ -320,6 +384,7 @@ const Reports = () => {
                     <th className="p-2 text-left">Date</th>
                     <th className="p-2 text-left">Cashier</th>
                     <th className="p-2 text-left">Payment</th>
+                    <th className="p-2 text-right">VAT</th>
                     <th className="p-2 text-right">Amount</th>
                   </tr>
                 </thead>
@@ -342,11 +407,12 @@ const Reports = () => {
                         <td className="p-2">{new Date(sale.createdAt).toLocaleString()}</td>
                         <td className="p-2">{sale.cashierName}</td>
                         <td className="p-2 capitalize">{sale.paymentMethod}</td>
+                        <td className="p-2 text-right">KES {(sale.saleVAT ?? calculateVATForAmount(sale.totalAmount)).toFixed(2)}</td>
                         <td className="p-2 text-right font-bold">KES {sale.totalAmount.toFixed(2)}</td>
                       </tr>
                       {expandedSales.has(sale.id) && sale.items && sale.items.length > 0 && (
                         <tr key={`${sale.id}-items`}>
-                          <td colSpan={6} className="p-0">
+                          <td colSpan={7} className="p-0">
                             <div className="bg-muted/30 p-4">
                               <p className="text-sm font-semibold mb-2">Items Sold:</p>
                               <table className="w-full text-sm">
@@ -355,7 +421,9 @@ const Reports = () => {
                                     <th className="p-2 text-left">Product</th>
                                     <th className="p-2 text-right">Qty</th>
                                     <th className="p-2 text-right">Price</th>
-                                    <th className="p-2 text-right">Subtotal</th>
+                                    <th className="p-2 text-right">Subtotal (Gross)</th>
+                                    <th className="p-2 text-right">VAT</th>
+                                    <th className="p-2 text-right">Net</th>
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -365,6 +433,8 @@ const Reports = () => {
                                       <td className="p-2 text-right">{item.quantity}</td>
                                       <td className="p-2 text-right">KES {item.price.toFixed(2)}</td>
                                       <td className="p-2 text-right">KES {item.subtotal.toFixed(2)}</td>
+                                      <td className="p-2 text-right">KES {item.vat.toFixed(2)}</td>
+                                      <td className="p-2 text-right">KES {item.net.toFixed(2)}</td>
                                     </tr>
                                   ))}
                                 </tbody>
