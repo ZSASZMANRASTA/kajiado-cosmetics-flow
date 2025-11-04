@@ -1,7 +1,8 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Printer, Share2 } from 'lucide-react';
+import { Printer, Share2, FileText } from 'lucide-react';
 import { toast } from 'sonner';
+import { useState } from 'react';
 
 interface ReceiptDialogProps {
   open: boolean;
@@ -35,6 +36,7 @@ export const ReceiptDialog = ({
   paymentMethod,
 }: ReceiptDialogProps) => {
   const now = new Date();
+  const [receiptType, setReceiptType] = useState<'normal' | 'vat' | 'both'>('normal');
   // Build per-item data (subtotal, vat, net)
   const itemsWithVat = items.map((item) => {
     const subtotal = Number(item.price) * Number(item.quantity);
@@ -80,9 +82,57 @@ TOTAL (Incl. VAT): KES ${Number(total).toFixed(2)}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 `;
 
-  const handlePrint = () => {
+  const vatOnlyReceipt = `
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    KAJIADO POS SYSTEM
+    VAT ONLY RECEIPT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Receipt: ${receiptNumber}
+Date: ${now.toLocaleString()}
+Payment: ${paymentMethod.toUpperCase()}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+VAT BREAKDOWN (${Math.round(VAT_RATE * 100)}%)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+${itemsWithVat
+  .map(
+    (it) =>
+      `${it.name}
+  Qty: ${it.quantity}
+  Net Amount: KES ${it.net.toFixed(2)}
+  VAT Amount: KES ${it.vat.toFixed(2)}
+  Gross Total: KES ${it.subtotal.toFixed(2)}`
+  )
+  .join('\n\n')}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SUMMARY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Total Net Amount: KES ${totalNet.toFixed(2)}
+Total VAT (${Math.round(VAT_RATE * 100)}%): KES ${totalVAT.toFixed(2)}
+Total Gross Amount: KES ${Number(total).toFixed(2)}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   VAT Registration: TBD
+   PIN: TBD
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+`;
+
+  const handlePrint = (type: 'normal' | 'vat' | 'both' = receiptType) => {
     const printWindow = window.open('', '_blank');
     if (printWindow) {
+      let content = '';
+      if (type === 'normal') {
+        content = receiptContent;
+      } else if (type === 'vat') {
+        content = vatOnlyReceipt;
+      } else {
+        content = receiptContent + '\n\n' + vatOnlyReceipt;
+      }
+
       printWindow.document.write(`
         <html>
           <head>
@@ -105,7 +155,7 @@ TOTAL (Incl. VAT): KES ${Number(total).toFixed(2)}
               }
             </style>
           </head>
-          <body><pre>${receiptContent}</pre></body>
+          <body><pre>${content}</pre></body>
         </html>
       `);
       printWindow.document.close();
@@ -113,12 +163,21 @@ TOTAL (Incl. VAT): KES ${Number(total).toFixed(2)}
     }
   };
 
-  const handleShare = async () => {
+  const handleShare = async (type: 'normal' | 'vat' | 'both' = receiptType) => {
+    let content = '';
+    if (type === 'normal') {
+      content = receiptContent;
+    } else if (type === 'vat') {
+      content = vatOnlyReceipt;
+    } else {
+      content = receiptContent + '\n\n' + vatOnlyReceipt;
+    }
+
     if (navigator.share) {
       try {
         await navigator.share({
           title: `Receipt ${receiptNumber}`,
-          text: receiptContent,
+          text: content,
         });
         toast.success('Receipt shared successfully');
       } catch (error) {
@@ -129,7 +188,7 @@ TOTAL (Incl. VAT): KES ${Number(total).toFixed(2)}
     } else {
       // Fallback: copy to clipboard
       try {
-        await navigator.clipboard.writeText(receiptContent);
+        await navigator.clipboard.writeText(content);
         toast.success('Receipt copied to clipboard');
       } catch (error) {
         toast.error('Failed to copy receipt');
@@ -184,15 +243,47 @@ TOTAL (Incl. VAT): KES ${Number(total).toFixed(2)}
             </table>
           </div>
 
-          <div className="flex gap-2">
-            <Button onClick={handlePrint} className="flex-1">
-              <Printer className="mr-2 h-4 w-4" />
-              Print
-            </Button>
-            <Button onClick={handleShare} variant="outline" className="flex-1">
-              <Share2 className="mr-2 h-4 w-4" />
-              Share
-            </Button>
+          <div className="space-y-3">
+            <div className="flex gap-2">
+              <Button
+                variant={receiptType === 'normal' ? 'default' : 'outline'}
+                onClick={() => setReceiptType('normal')}
+                className="flex-1"
+                size="sm"
+              >
+                <FileText className="mr-2 h-4 w-4" />
+                Normal
+              </Button>
+              <Button
+                variant={receiptType === 'vat' ? 'default' : 'outline'}
+                onClick={() => setReceiptType('vat')}
+                className="flex-1"
+                size="sm"
+              >
+                <FileText className="mr-2 h-4 w-4" />
+                VAT Only
+              </Button>
+              <Button
+                variant={receiptType === 'both' ? 'default' : 'outline'}
+                onClick={() => setReceiptType('both')}
+                className="flex-1"
+                size="sm"
+              >
+                <FileText className="mr-2 h-4 w-4" />
+                Both
+              </Button>
+            </div>
+
+            <div className="flex gap-2">
+              <Button onClick={() => handlePrint()} className="flex-1">
+                <Printer className="mr-2 h-4 w-4" />
+                Print
+              </Button>
+              <Button onClick={() => handleShare()} variant="outline" className="flex-1">
+                <Share2 className="mr-2 h-4 w-4" />
+                Share
+              </Button>
+            </div>
           </div>
 
           <p className="text-xs text-muted-foreground text-center">

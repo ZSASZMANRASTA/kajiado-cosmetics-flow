@@ -15,8 +15,7 @@ interface CartItem {
   productId: number;
   name: string;
   price: number;
-  // allow temporary string while typing
-  quantity: number | string;
+  quantity: number;
 }
 
 const POS = () => {
@@ -70,13 +69,13 @@ const POS = () => {
     setCart(prev => {
       const existing = prev.find(item => item.productId === product.id);
       if (existing) {
-        if (existing.quantity >= product.stock) {
+        if (Number(existing.quantity) >= product.stock) {
           toast.error('Not enough stock!');
           return prev;
         }
         return prev.map(item =>
           item.productId === product.id
-            ? { ...item, quantity: item.quantity + 1 }
+            ? { ...item, quantity: Number(item.quantity) + 1 }
             : item
         );
       }
@@ -94,19 +93,18 @@ const POS = () => {
   };
 
   const updateQuantity = (productId: number, newQuantity: number) => {
-  if (isNaN(newQuantity) || newQuantity < 1) {
-    // keep same behaviour on final invalid (you can choose to remove or set to 1)
-    removeFromCart(productId);
-    return;
-  }
-  setCart((prev) =>
-    prev.map((item) =>
-      item.productId === productId ? { ...item, quantity: newQuantity } : item
-    )
-  );
-};
+    if (isNaN(newQuantity) || newQuantity < 1) {
+      removeFromCart(productId);
+      return;
+    }
+    setCart((prev) =>
+      prev.map((item) =>
+        item.productId === productId ? { ...item, quantity: newQuantity } : item
+      )
+    );
+  };
 
-  const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const total = cart.reduce((sum, item) => sum + item.price * Number(item.quantity), 0);
 
   const showReceipt = (receiptNumber: string, items: CartItem[], total: number, paymentMethod: string) => {
     setReceiptData({ receiptNumber, items, total, paymentMethod });
@@ -183,19 +181,20 @@ const POS = () => {
       });
 
       for (const item of cart) {
+        const qty = Number(item.quantity);
         await db.saleItems.add({
           saleId,
           productId: item.productId,
           productName: item.name,
-          quantity: item.quantity,
+          quantity: qty,
           price: item.price,
-          subtotal: item.price * item.quantity,
+          subtotal: item.price * qty,
         });
 
         const product = await db.products.get(item.productId);
         if (product) {
           await db.products.update(item.productId, {
-            stock: product.stock - item.quantity,
+            stock: product.stock - qty,
             updatedAt: new Date(),
           });
         }
@@ -304,41 +303,20 @@ const POS = () => {
                       </p>
                     </div>
                     <Input
-  type="text"
-  inputMode="decimal"
-  value={typeof item.quantity === 'number' ? item.quantity.toString() : item.quantity}
-  onChange={(e) => {
-    let val = e.target.value;
-    // allow comma from some keyboards, convert to dot
-    val = val.replace(',', '.');
-
-    // allow empty string or partial decimal like "1." ".5" or "12.34"
-    if (val === '' || /^\d*\.?\d*$/.test(val)) {
-      setCart((prev) =>
-        prev.map((cartItem) =>
-          cartItem.productId === item.productId
-            ? { ...cartItem, quantity: val }
-            : cartItem
-        )
-      );
-    }
-  }}
-  onBlur={(e) => {
-    // convert comma -> dot and parse
-    const raw = e.target.value.replace(',', '.');
-    const parsed = parseFloat(raw);
-
-    if (isNaN(parsed) || parsed <= 0) {
-      // user left it blank/invalid -> restore to 1
-      updateQuantity(item.productId, 1);
-    } else {
-      updateQuantity(item.productId, parsed);
-    }
-  }}
-  className="w-20"
-/>
+                      type="number"
+                      min="1"
+                      step="0.01"
+                      value={item.quantity}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        if (!isNaN(val) && val > 0) {
+                          updateQuantity(item.productId, val);
+                        }
+                      }}
+                      className="w-20"
+                    />
                     <p className="w-24 text-right font-bold">
-                      KES {(item.price * item.quantity).toFixed(2)}
+                      KES {(item.price * Number(item.quantity)).toFixed(2)}
                     </p>
                     <Button
                       variant="ghost"

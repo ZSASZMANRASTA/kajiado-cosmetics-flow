@@ -53,9 +53,7 @@ const Dashboard = () => {
 
     // Normalize to a Blob
     let blob: Blob;
-    if (exported instanceof Blob) {
-      blob = exported;
-    } else if (typeof exported === 'string') {
+    if (typeof exported === 'string') {
       blob = new Blob([exported], { type: 'application/json' });
     } else {
       // likely an object
