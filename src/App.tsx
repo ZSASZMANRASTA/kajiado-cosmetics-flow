@@ -11,6 +11,9 @@ import POS from "./pages/POS";
 import Inventory from "./pages/Inventory";
 import Reports from "./pages/Reports";
 import Users from "./pages/Users";
+import Invoices from "./pages/Invoices";
+import InvoiceCreate from "./pages/InvoiceCreate";
+import InvoiceView from "./pages/InvoiceView";
 import NotFound from "./pages/NotFound";
 
 const App = () => (
@@ -59,6 +62,38 @@ const App = () => (
             element={
               <ProtectedRoute requireAdmin>
                 <Users />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/invoices"
+            element={
+              <ProtectedRoute>
+                <Invoices />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/invoices/create"
+            element={
+              <ProtectedRoute>
+                <InvoiceCreate />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/invoices/edit/:id"
+            element={
+              <ProtectedRoute>
+                <InvoiceCreate />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/invoices/:id"
+            element={
+              <ProtectedRoute>
+                <InvoiceView />
               </ProtectedRoute>
             }
           />

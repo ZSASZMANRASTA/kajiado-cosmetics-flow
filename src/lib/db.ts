@@ -52,22 +52,74 @@ export interface SaleItem {
   subtotal: number;
 }
 
+export interface Invoice {
+  id?: number;
+  invoiceNumber: string;
+  customerName: string;
+  customerPhone?: string;
+  customerEmail?: string;
+  customerAddress?: string;
+  issueDate: Date;
+  dueDate: Date;
+  status: 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled';
+  subtotal: number;
+  vatAmount: number;
+  totalAmount: number;
+  amountPaid: number;
+  balanceDue: number;
+  paymentTerms: string;
+  notes?: string;
+  createdBy: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface InvoiceItem {
+  id?: number;
+  invoiceId: number;
+  productId?: number;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  subtotal: number;
+  vatAmount: number;
+  total: number;
+}
+
+export interface InvoicePayment {
+  id?: number;
+  invoiceId: number;
+  paymentDate: Date;
+  amount: number;
+  paymentMethod: 'cash' | 'mpesa' | 'card' | 'bank_transfer';
+  referenceNumber?: string;
+  notes?: string;
+  recordedBy: number;
+  createdAt: Date;
+}
+
 export class LocalDatabase extends Dexie {
   users!: Table<User>;
   products!: Table<Product>;
   sales!: Table<Sale>;
   saleItems!: Table<SaleItem>;
   categories!: Table<Category>;
+  invoices!: Table<Invoice>;
+  invoiceItems!: Table<InvoiceItem>;
+  invoicePayments!: Table<InvoicePayment>;
 
   constructor() {
     super('KajiadoPOS');
 
-    this.version(2).stores({
+    this.version(3).stores({
       users: '++id, email, role',
       products: '++id, name, brand, category, barcode, stock',
       sales: '++id, receiptNumber, cashierId, createdAt',
       saleItems: '++id, saleId, productId',
-      categories: '++id, name'
+      categories: '++id, name',
+      invoices: '++id, invoiceNumber, customerName, status, createdBy, createdAt',
+      invoiceItems: '++id, invoiceId, productId',
+      invoicePayments: '++id, invoiceId, paymentDate'
     });
   }
 
@@ -123,6 +175,41 @@ export class LocalDatabase extends Dexie {
     return hash === hashedPassword;
   }
 
+  async generateInvoiceNumber(): Promise<string> {
+    const today = new Date();
+    const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
+    
+    const todayStart = new Date(today.setHours(0, 0, 0, 0));
+    const count = await this.invoices
+      .where('createdAt')
+      .aboveOrEqual(todayStart)
+      .count();
+    
+    const sequence = String(count + 1).padStart(4, '0');
+    return `INV-${dateStr}-${sequence}`;
+  }
+
+  async updateInvoiceStatus(invoiceId: number) {
+    const invoice = await this.invoices.get(invoiceId);
+    if (!invoice) return;
+    
+    const today = new Date();
+    let newStatus = invoice.status;
+    
+    if (invoice.balanceDue === 0) {
+      newStatus = 'paid';
+    } else if (today > invoice.dueDate && invoice.status !== 'paid') {
+      newStatus = 'overdue';
+    }
+    
+    if (newStatus !== invoice.status) {
+      await this.invoices.update(invoiceId, { 
+        status: newStatus,
+        updatedAt: new Date()
+      });
+    }
+  }
+
   async exportData() {
     const data = {
       users: await this.users.toArray(),
@@ -130,8 +217,11 @@ export class LocalDatabase extends Dexie {
       sales: await this.sales.toArray(),
       saleItems: await this.saleItems.toArray(),
       categories: await this.categories.toArray(),
+      invoices: await this.invoices.toArray(),
+      invoiceItems: await this.invoiceItems.toArray(),
+      invoicePayments: await this.invoicePayments.toArray(),
       exportDate: new Date().toISOString(),
-      version: 2
+      version: 3
     };
 
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -185,6 +275,18 @@ export class LocalDatabase extends Dexie {
       if (data.categories && data.categories.length > 0) {
         await this.categories.bulkAdd(data.categories);
         console.log('DB Import: Added', data.categories.length, 'categories');
+      }
+      if (data.invoices && data.invoices.length > 0) {
+        await this.invoices.bulkAdd(data.invoices);
+        console.log('DB Import: Added', data.invoices.length, 'invoices');
+      }
+      if (data.invoiceItems && data.invoiceItems.length > 0) {
+        await this.invoiceItems.bulkAdd(data.invoiceItems);
+        console.log('DB Import: Added', data.invoiceItems.length, 'invoice items');
+      }
+      if (data.invoicePayments && data.invoicePayments.length > 0) {
+        await this.invoicePayments.bulkAdd(data.invoicePayments);
+        console.log('DB Import: Added', data.invoicePayments.length, 'invoice payments');
       }
       
       console.log('DB Import: Import completed successfully');
